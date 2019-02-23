@@ -1,45 +1,22 @@
 import sys
-import torch
 import itertools
+import time
 from numbers import Number
 import numpy as np
-from torch import nn
+# import torch
+# from torch import nn
+# import torch.distributions as D
+# import torch.nn.functional as F
+
 import cvxpy as cp
-import torch.distributions as D
-import torch.nn.functional as F
 import cvxpy.atoms.elementwise as E
 import cvxpy.atoms.affine as A
-from scipy.special import comb, logsumexp
-from scipy.stats import expon
+
+from scipy.special import logsumexp
+from scipy.stats import expon, multinomial, multivariate_normal, norm
+from concurrent.futures import ThreadPoolExecutor, wait
+from multiprocessing.pool import Pool
 from data_processing import *
-
-
-def log_sum_exp(value, dim=None, keepdim=False):
-    """Numerically stable implementation of the operation
-
-    value.exp().sum(dim, keepdim).log()
-    """
-    # TODO: torch.max(value, dim=None) threw an error at time of writing
-    if 'tensor' not in str(type(value)).lower():
-	    value = torch.tensor(value, requires_grad=True)
-
-    if dim is not None:
-        m, _ = torch.max(value, dim=dim, keepdim=True)
-        value0 = value - m
-        if keepdim is False:
-            m = m.squeeze(dim)
-        return m + torch.log(torch.sum(torch.exp(value0),
-                                       dim=dim, keepdim=keepdim))
-    else:
-        m = torch.max(value)
-        if torch.isinf(m):
-        	sum_exp = torch.tensor(0.0)
-        else:
-	        sum_exp = torch.sum(torch.exp(value - m))
-        if isinstance(sum_exp, Number):
-            return m + math.log(sum_exp)
-        else:
-            return m + torch.log(sum_exp)
 
 class VectorMultinomial(object):
 	"""docstring for VectorMultinomial"""
@@ -47,59 +24,59 @@ class VectorMultinomial(object):
 		super(VectorMultinomial, self).__init__()
 		if data is not None:
 			self.data = data		
-			self.probs = [np.histogram(data[:,[i]], bins=data[:,[i]].max()+1)[0].astype('float32') for i in range(data.shape[1])]			
+			self.probs = [np.histogram(data[:,[i]], bins=data[:,[i]].max()+1)[0].astype('float32')+1e-20 for i in range(data.shape[1])]			
 		elif probs is not None:
 			self.probs = probs
-		self.probs = [(torch.from_numpy(x/np.sum(x))) for x in self.probs]
-		print self.probs
+		self.probs = [x/np.sum(x) for x in self.probs]
 	
 	def sample(self):
-		return torch.tensor([torch.argmax(D.Multinomial(1,p).sample()) for p in self.probs])
+		return [np.argmax(np.random.multinomial(1,p)) for p in self.probs]
 	
 	def sample_n(self, n):
-		return torch.tensor([self.sample() for i in range(n)])
+		return [self.sample() for i in range(n)]
 
 	def pdf(self,x):	
 		if len(x.shape) < 2:
-			x = x.unsqueeze(0)
-		return torch.tensor([torch.sum(torch.tensor([torch.log(self.probs[i][y[i]] if y[i] < len(self.probs[i]) else torch.tensor(0.0)) for i in range(len(y))])) for y in x])
+			x = np.expand_dims(x, 0)
+		return [np.sum([np.log(self.probs[i][y[i]] if y[i] < len(self.probs[i]) else 1e-20) for i in range(len(y))]) for y in x]
 
 class VectorUniform(object):
 	"""docstring for VectorMultinomial"""
 	def __init__(self, data=None, probs=None):
 		super(VectorUniform, self).__init__()
 		if data is not None:
-			self.data = data.numpy()				
-			self.probs = [torch.tensor([1.0/(self.data[:,[i]].max()+1)]*(self.data[:,[i]].max()+1)) for i in range(data.shape[1])]			
+			self.data = data				
+			self.probs = [[1.0/(self.data[:,[i]].max()+1)]*(self.data[:,[i]].max()+1) for i in range(data.shape[1])]			
 			print self.probs
 		elif probs is not None:
 			self.probs = probs
 	
 	def sample(self):
-		return torch.tensor([torch.argmax(D.Multinomial(1,p).sample()) for p in self.probs])
+		return [np.argmax(np.random.multinomial(1,p)) for p in self.probs]
 	
 	def sample_n(self, n):
-		return torch.tensor([self.sample() for i in range(n)])
+		return [self.sample() for i in range(n)]
 
 	def pdf(self,x):	
 		if len(x.shape) < 2:
 			x = x.unsqueeze(0)
-		return torch.tensor([torch.sum(torch.tensor([torch.log(self.probs[i][y[i]] if y[i] < len(self.probs[i]) else torch.tensor(0.0)) for i in range(len(y))])) for y in x])
+		return [np.sum([np.log(self.probs[i][y[i]] if y[i] < len(self.probs[i]) else 1e-20) for i in range(len(y))]) for y in x]
 		
 class GaussianNoisyChannel(object):
 	"""docstring for NoisyChannel"""
 	def __init__(self, mean, cov, clip_range=None):
-		super(NoisyChannel, self).__init__()
-		self.noiseDist = D.MultivariateNormal(mean, cov)
+		super(NoisyChannel, self).__init__()		
+		self.mean = mean
+		self.cov = cov
 		self.clip_range = clip_range
 
 	def addNoise(self, x):
-		noisy = x + self.noiseDist.sample_n(x.size()[0] if len(x.size()) >= 2 else 1).long()
+		noisy = x + np.random.multivariate_normal(self.mean, self.cov, size=n)
 		if self.clip_range is not None:
-			noisy = noisy.transpose(0,1)
+			noisy = noisy.T
 			for i in range(noisy.shape[0]):
-				noisy[i] = torch.clamp(noisy[i], min=self.clip_range[i][0], max=self.clip_range[i][1])
-			noisy = noisy.transpose(0,1)
+				noisy[i] = np.clip(noisy[i], a_min=self.clip_range[i][0], a_max=self.clip_range[i][1])
+			noisy = noisy.T
 		return noisy
 
 	def __call__(self, x):
@@ -107,7 +84,7 @@ class GaussianNoisyChannel(object):
 
 	def pdf(self, ct, c):
 		diff = ct - c
-		return self.noiseDist.log_prob(diff.float())
+		return self.noiseDist.log_prob(diff)
 
 class IdentityNoisyChannel(object):
 	"""docstring for IdentityNoisyChannel"""
@@ -121,11 +98,11 @@ class IdentityNoisyChannel(object):
 		return self.addNoise(x)
 
 	def pdf(self, ct, c):
-		nz = torch.nonzero(ct - c)[:,[0]].squeeze()		
-		p = torch.ones(max(ct.shape[0], c.shape[0]))
+		nz = np.nonzero(ct - c)[0]
+		p = np.ones(max(ct.shape[0], c.shape[0]))
 		p[nz] = 0
 		# print ct - c, nz, p
-		return torch.log(p)
+		return np.log(p)
 		
 class RandomNoisyChannel(object):
 	"""docstring for RandomNoisyChannel"""
@@ -136,14 +113,16 @@ class RandomNoisyChannel(object):
 		self.VC = VC
 
 	def addNoise(self,x):
-		noisy = torch.zeros(x.shape).long()
+		noisy = np.zeros(x.shape)
 		flips = [np.random.binomial(1, self.true_prob) for i in range(x.shape[0])]
 		for i in range(len(flips)):
 			if flips[i]:
 				noisy[i] = x[i]
 			else:				
-				vc = self.VC[torch.min(self.VC != x[i], dim=1)[0]]
-				noisy[i] = vc[np.random.randint(vc.shape[0])]
+				j = np.random.randint(self.VC.shape[0])
+				while np.allclose(self.VC[j], x[i]):
+					j = np.random.randint(self.VC.shape[0])
+				noisy[i] = self.VC[j]
 		return noisy
 
 	def __call__(self, x):
@@ -151,77 +130,97 @@ class RandomNoisyChannel(object):
 
 	def pdf(self, ct, c):
 		if len(ct.shape) == 1 and len(c.shape) == 1:
-			if torch.min(ct == c):
+			if np.min(ct == c):
 				return np.log(self.true_prob)
 			else:
 				return np.log(self.noisy_prob)
 		else:
-			nz = torch.nonzero(ct - c)[:,[0]].squeeze()		
-			p = torch.zeros(max(ct.shape[0], c.shape[0])) + self.true_prob
+			nz = np.nonzero(ct - c)[0]
+			p = np.zeros(max(ct.shape[0], c.shape[0])) + self.true_prob
 			p[nz] = self.noisy_prob
 			# print ct - c, nz, p
-			return torch.log(p)
+			return np.log(p)
 
 class Experiment(object):
 	"""docstring for Experiment"""	
 
-	def __init__(self, VC, G=None, Q=None):
+	def __init__(self, VC, G=None, Q=None, true_prob=0.9):
 		super(Experiment, self).__init__()
+		self.reset(VC, G, Q, true_prob=true_prob)
 
-		self.VC = VC
+	def reset(self, VC, G=None, Q=None, true_prob=0.9):
+		self.VC = VC		
 		rangeVC = [(VC[:,[i]].min(), VC[:,[i]].max()) for i in range(self.VC.shape[1])]
+
 		if G is None:
-			G = self.VC#.repeat(10,1)
+			self.G = self.VC#.repeat(10,1)
 		else:
-			G = torch.from_numpy(G).long()
+			self.G = G
 
 		if Q is None:
-			Q = self.VC.repeat(100,1)
+			self.Q = self.VC.repeat(100,1)
 		else:
-			Q = torch.from_numpy(Q).long()
-		print G.shape, Q.shape
+			self.Q = Q
+
+		self.filter_VC = lambda keep_values: self.VC[[i for i in range(len(self.VC)) 
+													if len(keep_values[np.all(keep_values == self.VC[i], axis=1)]) > 0]]
+
+		self.VC_G = self.filter_VC(self.G)		
 
 		self.PQ = VectorMultinomial(Q)
 		self.PG = VectorMultinomial(G)
 
 		# self.H = GaussianNoisyChannel(torch.zeros(Q.shape[1]), torch.tensor([[0.5,0],[0,5]]), rangeVC)
 		# self.H = IdentityNoisyChannel()
-		self.H = RandomNoisyChannel(.90, self.VC)
+		self.H = RandomNoisyChannel(true_prob, self.VC)
 		self.P_H = self.H.pdf
 		# self.J = IdentityNoisyChannel()
 		# self.J = GaussianNoisyChannel(torch.zeros(G.shape[1]), torch.tensor([[0.5,0],[0,7]]), rangeVC)
-		self.J = RandomNoisyChannel(.90, self.VC)
+		self.J = RandomNoisyChannel(true_prob, self.VC)
 		self.P_J = self.J.pdf
 
 
 		self.Qt = self.H(Q)
 		self.Gt = self.J(G)		
 		
+		self.VC_Gt = self.filter_VC(self.Gt)
+
 		PQ_Q = self.PQ.pdf(self.VC)
-		self.P_QHct = lambda ct: log_sum_exp(PQ_Q + self. P_H(ct,self.VC))
+		self.P_QHct = lambda ct: logsumexp(PQ_Q + self. P_H(ct,self.VC))
 		self.P_QHcgct = lambda c,ct: (self.PQ.pdf(c)+self.P_H(ct,c)-self.P_QHct(ct))
 
-		PG_G = self.PG.pdf(self.VC)		
-		self.P_GJct = lambda ct: log_sum_exp(PG_G + self.P_J(ct,self.VC))
+		self.PG_G = self.PG.pdf(self.VC_G)		
+		self.P_GJct = lambda ct: logsumexp(self.PG_G + self.P_J(ct,self.VC_G))
 		self.P_GJcgct = lambda c,ct: self.PG.pdf([c])+self.P_J(ct,c)-self.P_GJct(ct)		
 
 		self.Q = Q
 		self.G = G
 
+	def updateGallery(self, remove_idices):
+		self.G = np.delete(self.G, remove_idices, axis=0)
+		self.Gt = np.delete(self.Gt, remove_idices, axis=0)
+
+		self.PG = VectorMultinomial(self.G)
+
+		self.VC_G = self.filter_VC(self.G)
+		self.PG_G = self.PG.pdf(self.VC_G)
+
+		self.VC_Gt = self.filter_VC(self.Gt)
+
 class UniqueMatchExperiment(Experiment):
 	"""docstring for UniqueMatchExperiment"""
-	def __init__(self, G, Q=None):
+	def __init__(self, G, Q=None, true_prob=0.9):
 		rangeVC = [np.arange(G[:,[i]].min(), G[:,[i]].max()+1) for i in range(G.shape[1])]		
-		VC = torch.tensor([[x,y] for x,y in itertools.product(*rangeVC)])
+		VC = np.array([[x,y] for x,y in itertools.product(*rangeVC)])
 
-		super(UniqueMatchExperiment, self).__init__(VC, G, Q)
+		super(UniqueMatchExperiment, self).__init__(VC, G, Q, true_prob=true_prob)
 
 		N = self.G.shape[0]
-		self.PCorrgCqCsel = lambda cq, csel: torch.log(torch.exp(self.P_J(csel,cq)) - torch.exp(self.P_J(csel,cq) + N*(torch.log(1-torch.exp(self.P_GJct(csel))))))
-		self.PCorrgCtqCsel = lambda ctq, csel: log_sum_exp(self.P_QHcgct(self.VC, ctq)+self.PCorrgCqCsel(self.VC, csel))
-		self.hatC = lambda ctq: self.VC[torch.argmax(torch.tensor([self.PCorrgCtqCsel(ctq,csel) for csel in self.VC]))]
+		self.PCorrgCqCsel = lambda cq, csel: np.log(np.exp(self.P_J(csel,cq)) - np.exp(self.P_J(csel,cq) + N*(np.log(1-np.exp(self.P_GJct(csel))))))
+		self.PCorrgCtqCsel = lambda ctq, csel: logsumexp(self.P_QHcgct(self.VC, ctq)+self.PCorrgCqCsel(self.VC, csel))
+		self.hatC = lambda ctq: self.VC[np.argmax([self.PCorrgCtqCsel(ctq,csel) for csel in self.VC])]
 
-	def test(self, ids):
+	def test(self, ids, verbose=True, naiive=False):
 		hatC_cache = {}
 		total_correct = 0
 		total_cov_correct = 0
@@ -230,10 +229,13 @@ class UniqueMatchExperiment(Experiment):
 		for i in range(len(self.Qt)):			
 			cq = self.Q[i]
 			ctq = self.Qt[i]
-			csel = hatC_cache.get(ctq, self.hatC(ctq))	
+			if naiive:
+				csel = ctq
+			else:
+				csel = hatC_cache.setdefault(tuple(ctq), self.hatC(ctq))
 			# print torch.min(self.Gt == csel, dim=1)
 
-			shortlist = torch.arange(0,self.Gt.shape[0])[torch.min(self.Gt == csel, dim=1)[0]]
+			shortlist = np.arange(0,self.Gt.shape[0])[np.all(self.Gt == csel, axis=1)]
 			choice = -1
 			correct = 0
 			cov_correct = 0
@@ -242,29 +244,30 @@ class UniqueMatchExperiment(Experiment):
 				# choice = self.G[choice]
 				# correct = int(torch.equal(choice,cq))
 				correct = int(choice == ids[i])
-				cov_correct = int(torch.equal(self.G[choice], cq))
+				cov_correct = int(np.allclose(self.G[choice], cq))
 			total_correct += correct
 			total_cov_correct += cov_correct
 			total += 1
-			print i, cq, ctq, csel, ids[i], int(choice), self.G[choice], float(total_correct)/total, float(total_cov_correct)/total
+			if verbose:
+				print i, cq, ctq, csel, ids[i], int(choice), self.G[choice], float(total_correct)/total, float(total_cov_correct)/total
 			
 			# confentry = confmat.setdefault(str(list(cq.numpy())), {})
 			# confentry[str(list(choice.numpy()))] = confentry.get(str(list(choice.numpy())),0)+1		
 			if choice >= 0:
 				confmat[ids[i], choice] += 1		
-		print float(total_correct)/total
-		np.save(confmat, 'confmat.npy')
+		return float(total_correct)/total
+		np.save('confmat.npy', confmat)
 		# for k in sorted(confmat.keys(), key=lambda x: eval(x)):
 		# 	print k, float(confmat[k].get(k,0))/sum(confmat[k].values()), sorted([(kk, confmat[k][kk]) for kk in confmat[k]], key=lambda x:x[1])[-1]
 		# print {k: sorted([(kk, confmat[k][kk]) for kk in confmat[k]], key=lambda x:x[1])[-1] for k in confmat}
 
 class VerificationExperiment(Experiment):
 	"""docstring for VerificationExperiment"""
-	def __init__(self, G, Q=None):		
-		rangeVC = [np.arange(G[:,[i]].min(), G[:,[i]].max()+1) for i in range(G.shape[1])]		
-		VC = torch.tensor([[x,y] for x,y in itertools.product(*rangeVC)])
-		print rangeVC
-		super(VerificationExperiment, self).__init__(VC, G, Q=Q)
+	def __init__(self, VC, G, Q=None, true_prob=0.9):		
+		# rangeVC = [np.arange(G[:,[i]].min(), G[:,[i]].max()+1) for i in range(G.shape[1])]		
+		# VC = np.array([[x,y] for x,y in itertools.product(*rangeVC)])
+		# print rangeVC
+		super(VerificationExperiment, self).__init__(VC, G, Q=Q, true_prob=true_prob)
 
 		# self.P_match = lambda ctq, ctg: log_sum_exp([self.P_H(ctq,cq)+self.P_J(ctg,cq)+self.PQ.pdf(cq)  for cq in self.VC])
 		# self.P_mismatch = lambda ctq, ctg: log_sum_exp([self.P_H(ctq,cq)+self.P_J(ctg,cg)+self.PQ.pdf(cq)+self.PG.pdf(cg)  for (cq,cg) in itertools.product(self.VC,self.VC)])				
@@ -292,7 +295,7 @@ class VerificationExperiment(Experiment):
 
 		self.P_mismatch = self.P_mismatch.reshape(-1)
 		self.P_match = self.P_match.reshape(-1)
-		print np.sum(np.exp(self.P_mismatch)), np.sum(np.exp(self.P_match))
+		# print np.sum(np.exp(self.P_mismatch)), np.sum(np.exp(self.P_match))
 
 		self.r = cp.Variable(self.VC.shape[0] * self.VC.shape[0])
 		E.log.log(self.r)
@@ -303,8 +306,9 @@ class VerificationExperiment(Experiment):
 		objective = cp.Minimize(self.FA)
 		constraints = [self.FA == self.FR, self.r >= 0.000, self.r <= 1.000]
 		prob = cp.Problem(objective, constraints)
-		print("Optimal value", prob.solve())
-		print("Optimal var", self.r.value)
+		prob.solve()
+		# print("Optimal value", prob.solve())
+		# print("Optimal var", self.r.value)
 
 		self.r = self.r.value
 		# print self.r[self.r >= 1]
@@ -315,7 +319,7 @@ class VerificationExperiment(Experiment):
 		print np.sum((1-self.r) * np.exp(self.P_match))		
 		self.r = self.r.reshape(self.VC.shape[0], self.VC.shape[0])
 
-	def test(self, qset=None, ids=None, labels=None):
+	def test(self, qset=None, ids=None, labels=None, verbose=True):
 		if qset is None:
 			assert(self.Q.shape[0] == self.G.shape[0])
 			qset = [x for x in itertools.product(range(self.Q.shape[0]),range(self.G.shape[0]))]			
@@ -334,54 +338,423 @@ class VerificationExperiment(Experiment):
 			[i_ctg_vc] = [j for j in range(len(self.VC)) if np.allclose(self.VC[j], self.Gt[i_ctg])]
 			
 			flip = np.random.binomial(1, self.r[i_ctq_vc, i_ctg_vc])
-			
+			# flip = int(np.all(self.Qt[i_ctq] == self.Gt[i_ctg]))
 			if labels[i]:
 				correct_pos += int(flip == labels[i])
 				total_pos += 1	
 			else:
 				correct_neg += int(flip == labels[i])
 				total_neg += 1
-			if i > 0 and min(total_pos, total_neg) > 0 and i % 1000 == 0:				
+			if verbose and i > 0 and min(total_pos, total_neg) > 0 and i % 1000 == 0:				
 				print i, self.Q[i_ctq], self.Qt[i_ctq], self.G[i_ctg], self.Gt[i_ctg], self.r[i_ctq_vc, i_ctg_vc], flip, labels[i]
 				print correct_pos/total_pos,correct_neg/total_neg, (correct_pos+correct_neg)/(total_pos+total_neg)
 			i+=1
-		print correct/total
+		return (correct_pos+correct_neg)/(total_pos+total_neg)
 
-def binomialCoeff(N, K, P):
-	return np.log(comb(N,K))+K*np.log(P)+(N-K)*np.log(1-P)
+def getAllBinomialProbs_(combs, P, invert_ks=False):
+		if len(P.shape) == 0:
+			P = np.expand_dims(P, 0)
+		
+		# print 1
+		t0 = time.time()
+		prob_terms = np.empty(combs.shape+(P.shape[0],), dtype='float32')
+		prob_terms[:] = -np.inf		
+		prob_terms[0,0] = 0
+		# print 2, time.time()-t0
+		t0 = time.time()
+		ks = np.arange(combs.shape[1])
+		mP = np.log(1-np.exp(P))
+		combs_expanded = np.expand_dims(combs,-1)		
+		# print 3,time.time()-t0
+
+		t0 = time.time()
+		for i in range(combs.shape[0]):
+			ncs = combs[i]
+			if i == 0:
+				continue
+			else:
+				for j in range(prob_terms.shape[-1]):					
+					ks_ = ks[:i+1]
+					ncks = ncs[ks_]
+					if invert_ks:
+						prob_terms[i,:i+1,j] = ncks + ks_[::-1]*P[j] + ks_*mP[j]
+					else:
+						prob_terms[i,:i+1,j] = ncks + ks_*P[j] + ks_[::-1]*mP[j]
+		# print 4, time.time()-t0
+		# t0 = time.time()
+		# probs = combs_expanded + prob_terms
+		# print 5, time.time()-t0
+		return prob_terms
+
+def PCorrgCtqCsel_((P_L, N, max_L, max_K, P_J, P_GJ, P_QHcgct, combs)):
+		sum_terms = []
+
+		bins_P_GJ = getAllBinomialProbs_(combs, P_GJ).squeeze()		
+		bins_P_J = getAllBinomialProbs_(combs, P_J)		
+		rand_i = np.random.randint(bins_P_J.shape[0])		
+
+		inner_sums = []
+		for L in range(1, max_L+1):
+			k_range = max_K+1
+			l_range = lambda k: min(L, k)+1						
+			ps = []
+			
+			for k in range(1,k_range):
+				# bin_L = self.getBinomialProbInRange(L, l_range(k), P_J)				
+				log_k = np.log(k)
+				for l in range(1,l_range(k)):
+					# p = self.binomial(self.N-l, k-l, P_GJ) + bin_L[l] - log_k
+					p = bins_P_GJ[N-l, k-l] + bins_P_J[L,l] - log_k
+					ps.append(p)
+					# print bins_P_GJ[self.N-l, k-l], bins_P_J[L,l][:3], log_k, p[:3]				
+			inner_sums.append(logsumexp(ps, axis=0))		
+		inner_sums = np.array(inner_sums)		
+		sum_terms = P_L[1:].reshape(-1,1) + inner_sums		
+		return logsumexp(logsumexp(sum_terms,axis=0) + P_QHcgct)
 
 class OneofLExperiment(Experiment):
 	"""docstring for OneofLExperiment"""
-	def __init__(self, G, Q):
+	def __init__(self, G, Q, max_L=None, true_prob=0.9):
 		rangeVC = [np.arange(G[:,[i]].min(), G[:,[i]].max()+1) for i in range(G.shape[1])]		
-		VC = torch.tensor([[x,y] for x,y in itertools.product(*rangeVC)])
+		VC = np.array([[x,y] for x,y in itertools.product(*rangeVC)])
 
-		super(OneofLExperiment, self).__init__(VC, G, Q)
+		super(OneofLExperiment, self).__init__(VC, G, Q, true_prob=true_prob)
+		
 		self.N = self.G.shape[0]
+		if max_L is None:
+			self.max_L = self.N
+		else:
+			self.max_L = min(max_L, self.N)
+
+		self.max_K = np.max([self.Gt[np.all(self.Gt == c, axis=1)].shape[0] for c in self.VC])
+
+		# self.max_K = self.N
 
 		P_K_mt = {}
 		P_l_mt = {}
 		inner_sum_mt = {}
-		P_Kglctq = lambda K,l,csel: P_K_mt.setdefault((K,l,csel), binomialCoeff(self.N-1, K-l, self.P_GJct(csel)))
-		P_lgLctq = lambda l,L,csel,cq: P_l_mt.setdefault((l,L,csel,cq), binomialCoeff(L,l, self.P_J(csel,cq)))
+	
+		factorials = np.zeros(self.N+1).astype('float32')
+		factorials[0] = 0
+		factorials[1] = 0
+		for i in range(2,len(factorials)):
+			factorials[i] = np.log(i) + factorials[i-1]
+
+		nfactorials = factorials.reshape(-1,1)
+		denom = np.zeros((len(factorials), len(factorials)))
+		for i in range(len(factorials)):
+			if i == 0:
+				continue
+			else:
+				f = factorials[:i+1]
+				denom[i,:i+1] = f + f[::-1]
+		self.combs = nfactorials - denom
+		self.combs[np.triu_indices(self.combs.shape[0], k=1)] = -np.inf 
+
+		avg_rel = float(G.shape[0])/Q.shape[0]		
+		self.P_L = norm.logpdf(np.arange(self.max_L+1), loc=avg_rel)
+
+		self.binomial = lambda n,k,P: self.combs[n,k]+k*P+(n-k)*np.log(1-np.exp(P))
+		P_Kglctq = lambda K,l,csel: binomial(self.N-l, K-l, self.P_GJct(csel))
+		P_lgLctq = lambda L,l,csel,cq: binomial(L,l, self.P_J(csel,cq))
 		inner_sum = lambda L,K,l, csel, cq: inner_sum_mt.setdefault((L,K,l), 
-											np.logaddexp(P_Kglctq(K,l,csel), P_lgLctq(l,L,csel,cq)))
+											np.logaddexp(P_Kglctq(K,l,csel), P_lgLctq(L,l,csel,cq)))
 
-		self.PCorrgCqCsel = lambda cq, csel: logsumexp([np.logaddexp(P_Kglctq(K,L,csel), P_lgLctq(K,L,csel,cq))+np.log(1.0/K) 
-												for l in range(min(L,K)) for (L,K) in zip(range(N),range(N))])
-		self.PCorrgCtqCsel = lambda ctq, csel: logsumexp(self.P_QHcgct(self.VC, ctq)+self.PCorrgCqCsel(self.VC, csel))
+		# self.PCorrgCqCsel = lambda cq, csel: logsumexp([[inner_sum(L,K,l,csel,cq)-np.log(K) 
+		# 												for l in range(min(L,K))] for (L,K) in zip(range(self.N),range(self.N))])
+		self.PCorrgCtqCsel = lambda (ctq, csel) : logsumexp(self.P_QHcgct(self.VC, ctq)+
+																self.PCorrgCqCsel(self.VC, csel))
 
-id_map,_ = loadVCMeta('vox1_meta.csv')
-# ids, qdata = loadVCdata('iden_split.txt', gdata)
-labels, qset = loadVCVeriData('veri_test.txt', id_map)
-# G = genGallery([(0,1),(0,35)], 1)
-# ids, Q = genQueries(G, 1)
-Q = qset[:,[0]].squeeze()
-G = qset[:,[1]].squeeze()
-print Q.shape, G.shape
-e = OneofLExperiment(G, Q)
-# print e.P_J(torch.tensor([0,0]), e.VC)
-# print e.P_H(torch.tensor([[0,0],[0,1],[0,33]]), torch.tensor([[0,33]]))
-print e.PCorrgCtqCsel(np.array([[0,5]]),np.array([[0,5]]))
-e.test(ids=ids)
-# e.test(qset=zip(range(Q.shape[0]), range(G.shape[0])), labels=labels)
+		# self.hatC = lambda ctq: self.VC[np.argmax([self.PCorrgCtqCsel(ctq,csel) for csel in self.VC])]
+		self.P_C = lambda ctq: executor.map(self.PCorrgCtqCsel, [(ctq,csel) for csel in self.VC])		
+
+	def reset_super(self, VC, G, Q):
+		super(OneofLExperiment, self).reset(VC, G, Q)
+
+	def getBinomialProbInRange(self, N, k_range, P):
+		coeffs = self.combs[N,:k_range]
+		ks = np.arange(k_range)
+		return coeffs + ks*P + ks[::-1]*np.log(1-np.exp(P))
+
+	def getAllBinomialProbs(self, P, invert_ks=False):
+		if len(P.shape) == 0:
+			P = np.expand_dims(P, 0)
+		
+		# print 1
+		t0 = time.time()
+		prob_terms = np.empty(self.combs.shape+(P.shape[0],), dtype='float32')
+		prob_terms -= np.inf		
+		prob_terms[0,0] = 0
+		# print 2, time.time()-t0
+		t0 = time.time()
+		ks = np.arange(self.combs.shape[1])
+		mP = np.log(1-np.exp(P))
+		combs_expanded = np.expand_dims(self.combs,-1)		
+		# print 3,time.time()-t0
+
+		t0 = time.time()
+		for i in range(self.combs.shape[0]):
+			ncs = self.combs[i]
+			if i == 0:
+				continue
+			else:
+				for j in range(prob_terms.shape[-1]):					
+					ks_ = ks[:i+1]
+					ncks = ncs[ks_]
+					if invert_ks:
+						prob_terms[i,:i+1,j] = ncks + ks_[::-1]*P[j] + ks_*mP[j]
+					else:
+						prob_terms[i,:i+1,j] = ncks + ks_*P[j] + ks_[::-1]*mP[j]
+		# print 4, time.time()-t0
+		# t0 = time.time()
+		# probs = combs_expanded + prob_terms
+		# print 5, time.time()-t0
+		return prob_terms
+
+
+	def PCorrgCqCsel(self, cq, csel):
+		print csel
+		sum_terms = []
+		P_GJ = self.P_GJct(csel)
+		P_J = self.P_J(csel,cq)
+		
+		bins_P_GJ = self.getAllBinomialProbs(P_GJ).squeeze()		
+		bins_P_J = self.getAllBinomialProbs(P_J)		
+		rand_i = np.random.randint(bins_P_J.shape[0])		
+
+		inner_sums = []
+		for L in range(1, self.max_L+1):
+			k_range = self.max_K+1
+			l_range = lambda k: min(L, k)+1						
+			ps = []
+			
+			for k in range(1,k_range):
+				# bin_L = self.getBinomialProbInRange(L, l_range(k), P_J)				
+				log_k = np.log(k)
+				for l in range(1,l_range(k)):
+					# p = self.binomial(self.N-l, k-l, P_GJ) + bin_L[l] - log_k
+					p = bins_P_GJ[self.N-l, k-l] + bins_P_J[L,l] - log_k
+					ps.append(p)
+					# print bins_P_GJ[self.N-l, k-l], bins_P_J[L,l][:3], log_k, p[:3]				
+			inner_sums.append(logsumexp(ps, axis=0))		
+		inner_sums = np.array(inner_sums)		
+		sum_terms = self.P_L[1:].reshape(-1,1) + inner_sums		
+		return logsumexp(sum_terms,axis=0)
+	
+	def hatC(self, ctq):
+		# print [self.PCorrgCtqCsel(ctq,csel) for csel in self.VC]
+		# return self.VC[np.argmax([self.PCorrgCtqCsel((ctq,csel)) for csel in self.VC])]
+		Ps = P.map(PCorrgCtqCsel_, [(self.P_L, self.N, self.max_L, self.max_K, 
+				self.P_J(csel,self.VC), self.P_GJct(csel), 
+				self.P_QHcgct(self.VC, ctq), self.combs) for csel in self.VC_Gt])
+		Ps = np.array(Ps)
+		return self.VC_Gt[np.argmax(Ps)]
+
+	def test(self, g_ids):
+		hatC_cache = {}
+		total_correct = 0
+		total_cov_correct = 0
+		total = 0
+		confmat = np.zeros((self.Q.shape[0], self.Q.shape[0]))
+		for i in range(len(self.Qt)):
+			t0 = time.time()			
+			cq = self.Q[i]
+			ctq = self.Qt[i]
+			csel = hatC_cache.setdefault(tuple(ctq), self.hatC(ctq))	
+			# print torch.min(self.Gt == csel, dim=1)
+
+			shortlist = np.arange(0,self.Gt.shape[0])[np.all(self.Gt == csel, axis=1)]
+			choice = -1
+			correct = 0
+			cov_correct = 0
+			if len(shortlist) > 0:
+				choice = shortlist[np.random.randint(0,shortlist.shape[0])]
+				# choice = self.G[choice]
+				# correct = int(torch.equal(choice,cq))
+				choice_id = g_ids[choice]
+				correct = int(i == choice_id)
+				cov_correct = int(np.allclose(self.G[choice], cq))
+			total_correct += correct
+			total_cov_correct += cov_correct
+			total += 1
+			print i, cq, ctq, csel, choice, ids[i], int(choice_id), float(total_correct)/total, float(total_cov_correct)/total, time.time()-t0
+			print self.VC_G
+			# confentry = confmat.setdefault(str(list(cq.numpy())), {})
+			# confentry[str(list(choice.numpy()))] = confentry.get(str(list(choice.numpy())),0)+1		
+			if choice >= 0:
+				confmat[i, choice_id] += 1		
+		print float(total_correct)/total
+		np.save(confmat, 'confmat.npy')
+
+class RankingExperiment(OneofLExperiment):
+	"""docstring for RankingExperiment"""
+	def __init__(self, G, Q, max_L=None, true_prob=0.9):
+		super(RankingExperiment, self).__init__(G, Q, max_L, true_prob=true_prob)
+	
+	@staticmethod
+	def average_precision(ranking, total_hits):		
+		ranks = np.arange(1,len(ranking)+1).astype('float32')
+		return np.sum((np.cumsum(ranking)/ranks)[ranking == 1])/float(total_hits)
+
+	def test(self, g_ids, verbose=False, naive=False):
+		hatC_cache = {}
+		total_correct = 0
+		total_cov_correct = 0
+		total = 0
+		confmat = np.zeros((self.Q.shape[0], self.Q.shape[0]))
+
+		zero_hits = 0
+		full_G = self.G.copy()
+		full_g_ids = g_ids.copy()
+
+		APs = []
+		RRs = []
+		for i in range(len(self.Qt)):					
+			cq = self.Q[i]
+			ctq = self.Qt[i]
+
+			if verbose:
+				print "running query for ", ctq, cq
+
+			total_hits = len(g_ids[g_ids == i])			
+			if total_hits == 0:
+				zero_hits += 1
+				continue
+
+			if verbose:
+				print 'total_hits =', total_hits
+
+			ranking_labels = []
+			ranking_ids = []
+			total_correct = 0.0
+			ap = 0
+			rr = -1
+			for r in range(self.max_L):				
+				if naive:
+					csel = ctq
+				else:
+					csel = self.hatC(ctq)
+				np.random.seed(0)
+				shortlist = np.arange(0,self.Gt.shape[0])[np.all(self.Gt == csel, axis=1)]
+				choice = -1
+				correct = 0
+				cov_correct = 0
+				if len(shortlist) > 0:
+					choice = shortlist[np.random.randint(0,shortlist.shape[0])]
+					choice_id = g_ids[choice]
+					correct = int(i == choice_id)
+					total_correct += correct
+					if correct:
+						ap +=( total_correct/(r+1))/total_hits
+						if rr == -1:
+							rr = 1.0/(r+1)
+					ranking_labels.append(correct)
+					ranking_ids.append(choice_id)
+
+					g_ids = np.delete(g_ids, choice, 0)
+					n_left = g_ids[g_ids == i].shape[0]
+					
+				if verbose:								
+					print r, csel, self.G[choice], choice_id, i, ap, n_left, g_ids.shape #self.P_GJct(csel), self.Gt[np.all(self.Gt == ctq, axis=1)].shape[0]
+				if n_left == 0:
+						break
+				if choice != -1:
+					self.updateGallery([choice])
+			APs.append(ap)
+			RRs.append(rr)
+			
+			self.reset_super(self.VC, full_G, self.Q)
+			g_ids = full_g_ids		
+			np.savetxt('APs.txt', APs)
+			np.savetxt('RRs.txt', RRs)
+		print "MAP =",np.mean(APs), 'MRR =', np.mean(RRs)
+
+def runVeriTest(toy=True, true_prob=0.9):
+	id_map, _ = loadVCMeta('vox1_meta.csv')
+	if toy:
+		VC, id_map, gdata, ids = buildToyDataset([(0,1),(0,5)], 3, 5)
+		qset = []
+		labels = []
+		for i in range(len(gdata)):
+			neg = 	gdata[ids != ids[i]]
+			pos = gdata[ids == ids[i]]
+			for j in range(len(pos)):
+				qset.append(np.array([gdata[i], pos[j]]))
+				labels.append(1)
+
+				qset.append(np.array([gdata[i], neg[j]]))
+				labels.append(0)
+		qset = np.array(qset)
+		# qset = np.array([np.array(x) for x in itertools.product(gdata, gdata)])
+		# labels = [x == y for (x,y) in itertools.product(ids, ids)]
+	else:
+		labels, qset = loadVCVeriData('veri_test.txt', id_map)
+	Q = qset[:,[0]].squeeze()
+	G = qset[:,[1]].squeeze()
+	rangeVC = [np.arange(min(G[:,i].min(), Q[:,i].min()), max(G[:,i].max()+1, Q[:,i].max()+1)) for i in range(G.shape[1])]
+	VC = np.array([[x,y] for x,y in itertools.product(*rangeVC)])
+	e = VerificationExperiment(VC, G, Q, true_prob=true_prob)
+	qset = zip(range(Q.shape[0]), range(G.shape[0]))
+	# return e.test(qset, labels=labels)
+
+def runIDTest((toy, true_prob)):	
+	id_map, _ = loadVCMeta('vox1_meta.csv')
+	if toy:
+		VC, id_map, gdata, ids = buildToyDataset([(0,1),(0,5)], 3, 5)
+	else:
+		ids, gdata = loadVCIDdata('iden_split.txt', id_map)	
+	G, Q = id_map, gdata	
+	e = UniqueMatchExperiment(G, Q, true_prob=true_prob)
+	return e.test(ids, verbose=False, naiive=True)
+
+def runRankingTest(toy=True, true_prob=0.9):
+	id_map, _ = loadVCMeta('vox1_meta.csv')
+	if toy:
+		VC, id_map, gdata, ids = buildToyDataset([(0,1),(0,5)], 3, 5)
+	else:
+		ids, gdata = loadVCIDdata('iden_split.txt', id_map)
+	gdata = gdata[:500]
+	ids = ids[:500]
+	Q, G = id_map, gdata
+
+	global P
+	P = Pool(48)
+
+	e = RankingExperiment(G, Q, true_prob=true_prob)
+	e.test(ids, verbose=False, naive=False)
+
+
+# print P.map(runIDTest, [(False,p) for p in [1.0,0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1,0.0]])
+
+
+for NOISY_PROB in [0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1,0.0]:
+	print NOISY_PROB, runRankingTest(True, true_prob=NOISY_PROB)
+
+# P = Pool(24)
+id_map, _ = loadVCMeta('vox1_meta.csv')
+ids, gdata = loadVCIDdata('iden_split.txt', id_map)
+
+VC, id_map, gdata, ids = buildToyDataset([(0,1),(0,5)], 3, 5)
+# # gdata = gdata[:1000]
+# # ids = ids[:1000]
+Q, G = id_map, gdata
+
+# labels, qset = loadVCVeriData('veri_test.txt', id_map)
+# # Q = qset[:,[0]].squeeze()
+# # G = qset[:,[1]].squeeze()
+# # print Q.shape, G.shape
+# # max_L = np.max(np.bincount(ids[:1000]))
+# # print max_L
+
+e = RankingExperiment(G, Q)
+# # e = OneofLExperiment(G, Q, max_L=20)
+# # e = UniqueMatchExperiment(Q,G)
+# e = VerificationExperiment(id_map, id_map)
+# # t0 = time.time()
+# print e.PCorrgCtqCsel((np.array([[1,5]]),np.array([[1,5]])))
+print e.hatC(np.array([[1,2]]))
+# # print time.time() - t0
+
+# # e.test(ids)
+# e.test(qset, labels=labels)
+# # e.test(qset=zip(range(Q.shape[0]), range(G.shape[0])), labels=labels)
