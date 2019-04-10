@@ -1,52 +1,52 @@
 import numpy as np
 
 class VectorMultinomial(object):
-	"""docstring for VectorMultinomial"""
-	def __init__(self, data=None, probs=None):
-		super(VectorMultinomial, self).__init__()
-		if data is not None:
-			self.data = data		
-			self.probs = [np.histogram(data[:,[i]], bins=data[:,[i]].max()+1)[0].astype('float32')+1e-20 for i in range(data.shape[1])]			
-		elif probs is not None:
-			self.probs = probs
-		self.probs = [x/np.sum(x) for x in self.probs]
-	
-	def sample(self):
-		return [np.argmax(np.random.multinomial(1,p)) for p in self.probs]
-	
-	def sample_n(self, n):
-		return [self.sample() for i in range(n)]
+    """docstring for VectorMultinomial"""
+    def __init__(self, data=None, probs=None):
+        super(VectorMultinomial, self).__init__()
+        if data is not None:
+            self.data = data        
+            self.probs = [np.histogram(data[:,[i]], bins=data[:,[i]].max()+1)[0].astype('float32')+1e-20 for i in range(data.shape[1])]         
+        elif probs is not None:
+            self.probs = probs
+        self.probs = [x/np.sum(x) for x in self.probs]
+    
+    def sample(self):
+        return [np.argmax(np.random.multinomial(1,p)) for p in self.probs]
+    
+    def sample_n(self, n):
+        return [self.sample() for i in range(n)]
 
-	def pdf(self,x):	
-		if len(x.shape) < 2:
-			x = np.expand_dims(x, 0)
-		return [np.sum([np.log(self.probs[i][y[i]] if y[i] < len(self.probs[i]) else 1e-20) for i in range(len(y))]) for y in x]
+    def pdf(self,x):    
+        if len(x.shape) < 2:
+            x = np.expand_dims(x, 0)
+        return [np.sum([np.log(self.probs[i][y[i]] if y[i] < len(self.probs[i]) else 1e-20) for i in range(len(y))]) for y in x]
 
 class UniformVectorMultinomial(object):
-	"""docstring for UniformVectorMultinomial"""
-	def __init__(self, data):		
-		super(UniformVectorMultinomial, self).__init__()
-		self.N = reduce(lambda x,y: x*y, [len(set(data[:,i].tolist())) for i in range(data.shape[1])])		
-	def pdf(self, x):		
-		return np.zeros((x.shape[0],)) + np.log(1.0/self.N)
+    """docstring for UniformVectorMultinomial"""
+    def __init__(self, data):       
+        super(UniformVectorMultinomial, self).__init__()
+        self.N = reduce(lambda x,y: x*y, [len(set(data[:,i].tolist())) for i in range(data.shape[1])])      
+    def pdf(self, x):       
+        return np.zeros((x.shape[0],)) + np.log(1.0/self.N)
 
 class VectorUniform(object):
-	"""docstring for VectorMultinomial"""
-	def __init__(self, data=None, probs=None):
-		super(VectorUniform, self).__init__()
-		if data is not None:
-			self.data = data				
-			self.probs = [[1.0/(self.data[:,[i]].max()+1)]*(self.data[:,[i]].max()+1) for i in range(data.shape[1])]			
-		elif probs is not None:
-			self.probs = probs
-	
-	def sample(self):
-		return [np.argmax(np.random.multinomial(1,p)) for p in self.probs]
-	
-	def sample_n(self, n):
-		return [self.sample() for i in range(n)]
+    """docstring for VectorMultinomial"""
+    def __init__(self, data=None, probs=None):
+        super(VectorUniform, self).__init__()
+        if data is not None:
+            self.data = data                
+            self.probs = [[1.0/(self.data[:,[i]].max()+1)]*(self.data[:,[i]].max()+1) for i in range(data.shape[1])]            
+        elif probs is not None:
+            self.probs = probs
+    
+    def sample(self):
+        return [np.argmax(np.random.multinomial(1,p)) for p in self.probs]
+    
+    def sample_n(self, n):
+        return [self.sample() for i in range(n)]
 
-	def pdf(self,x):	
-		if len(x.shape) < 2:
-			x = x.unsqueeze(0)
-		return [np.sum([np.log(self.probs[i][y[i]] if y[i] < len(self.probs[i]) else 1e-20) for i in range(len(y))]) for y in x]
+    def pdf(self,x):    
+        if len(x.shape) < 2:
+            x = x.unsqueeze(0)
+        return [np.sum([np.log(self.probs[i][y[i]] if y[i] < len(self.probs[i]) else 1e-20) for i in range(len(y))]) for y in x]
