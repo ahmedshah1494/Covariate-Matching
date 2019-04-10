@@ -37,7 +37,6 @@ class VectorUniform(object):
 		if data is not None:
 			self.data = data				
 			self.probs = [[1.0/(self.data[:,[i]].max()+1)]*(self.data[:,[i]].max()+1) for i in range(data.shape[1])]			
-			print self.probs
 		elif probs is not None:
 			self.probs = probs
 	

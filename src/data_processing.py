@@ -74,6 +74,6 @@ if __name__ == '__main__':
 	ids, covariates = loadVCIDdata('iden_split.txt', id_mapping)
 	labels, pairs = loadVCVeriData('veri_test.txt', id_mapping)
 	VC, id_map, G, g_ids = buildToyDataset([(0,1),(0,5)], 3, 10)
-	print VC.shape, id_map.shape, G.shape, g_ids.shape 
+	print (VC.shape, id_map.shape, G.shape, g_ids.shape )
 	
 	

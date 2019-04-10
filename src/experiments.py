@@ -104,7 +104,7 @@ class UniqueMatchExperiment(Experiment):
 		self.PCorrgCtqCsel = lambda ctq, csel: logsumexp(self.P_QHcgct(self.VC, ctq)+self.PCorrgCqCsel(self.VC, csel))
 		self.hatC = lambda ctq: self.VC_Gt[np.argmax([self.PCorrgCtqCsel(ctq,csel) for csel in self.VC_Gt])]
 
-	def test(self, ids, verbose=True, naiive=False):
+	def test(self, ids, verbose=True, naive=False):
 		hatC_cache = {}
 		total_correct = 0
 		total_cov_correct = 0
@@ -113,7 +113,7 @@ class UniqueMatchExperiment(Experiment):
 		for i in range(len(self.Qt)):			
 			cq = self.Q[i]
 			ctq = self.Qt[i]
-			if naiive:
+			if naive:
 				csel = ctq
 			else:
 				csel = hatC_cache.setdefault(tuple(ctq), self.hatC(ctq))
@@ -133,7 +133,7 @@ class UniqueMatchExperiment(Experiment):
 			total_cov_correct += cov_correct
 			total += 1
 			if verbose:
-				print i, cq, ctq, csel, ids[i], int(choice), self.G[choice], float(total_correct)/total, float(total_cov_correct)/total
+				print (i, cq, ctq, csel, ids[i], int(choice), self.G[choice], float(total_correct)/total, float(total_cov_correct)/total)
 			
 			# confentry = confmat.setdefault(str(list(cq.numpy())), {})
 			# confentry[str(list(choice.numpy()))] = confentry.get(str(list(choice.numpy())),0)+1		
@@ -164,7 +164,7 @@ class VerificationExperiment(Experiment):
 		PG = self.PG.pdf(self.VC)
 		PQ = self.PQ.pdf(self.VC)
 		print(np.exp(P_J))
-		print np.sum(np.exp(P_J), axis=1), np.sum(np.exp(P_H), axis=1)
+		print (np.sum(np.exp(P_J), axis=1), np.sum(np.exp(P_H), axis=1))
 
 		for (i_ctq, i_ctg) in cov_pairs:
 			p_match = []
@@ -181,7 +181,7 @@ class VerificationExperiment(Experiment):
 
 		self.P_mismatch = self.P_mismatch.reshape(-1)
 		self.P_match = self.P_match.reshape(-1)
-		print np.sum(np.exp(self.P_mismatch)), np.sum(np.exp(self.P_match))
+		print (np.sum(np.exp(self.P_mismatch)), np.sum(np.exp(self.P_match)))
 
 		self.r = cp.Variable(self.VC.shape[0] * self.VC.shape[0])
 		# E.log.log(self.r)
@@ -201,8 +201,8 @@ class VerificationExperiment(Experiment):
 		# print self.r[self.r <= 0]
 		self.r[self.r > 1] = 1
 		self.r[self.r < 0] = 0		
-		print "FA =",np.sum(self.r * np.exp(self.P_mismatch))
-		print "FR =",np.sum((1-self.r) * np.exp(self.P_match))		
+		print ("FA =",np.sum(self.r * np.exp(self.P_mismatch)))
+		print ("FR =",np.sum((1-self.r) * np.exp(self.P_match))		)
 		self.r = self.r.reshape(self.VC.shape[0], self.VC.shape[0])
 
 	def test(self, qset=None, ids=None, labels=None, verbose=True, naive=False):
@@ -238,8 +238,8 @@ class VerificationExperiment(Experiment):
 					correct_neg += int(flip == labels[i])
 				total_neg += 1
 			if verbose and i > 0 and min(total_pos, total_neg) > 0 and i % 1000 == 0:				
-				print i, self.Q[i_ctq], self.Qt[i_ctq], self.G[i_ctg], self.Gt[i_ctg], self.r[i_ctq_vc, i_ctg_vc], flip, labels[i]
-				print correct_pos/total_pos,correct_neg/total_neg, (correct_pos+correct_neg)/(total_pos+total_neg)
+				print (i, self.Q[i_ctq], self.Qt[i_ctq], self.G[i_ctg], self.Gt[i_ctg], self.r[i_ctq_vc, i_ctg_vc], flip, labels[i])
+				print (correct_pos/total_pos,correct_neg/total_neg, (correct_pos+correct_neg)/(total_pos+total_neg))
 			i+=1
 		return (correct_pos+correct_neg)/(total_pos+total_neg)
 
@@ -344,7 +344,7 @@ class OneofLExperiment(Experiment):
 
 
 	def PCorrgCqCsel(self, cq, csel):
-		print csel
+		print (csel)
 		sum_terms = []
 		P_GJ = self.P_GJct(csel)
 		P_J = self.P_J(csel,cq)
@@ -413,13 +413,13 @@ class OneofLExperiment(Experiment):
 			total_correct += correct
 			total_cov_correct += cov_correct
 			total += 1
-			print i, cq, ctq, csel, choice, ids[i], int(choice_id), float(total_correct)/total, float(total_cov_correct)/total, time.time()-t0
-			print self.VC_G
+			print (i, cq, ctq, csel, choice, ids[i], int(choice_id), float(total_correct)/total, float(total_cov_correct)/total, time.time()-t0)
+			print (self.VC_G)
 			# confentry = confmat.setdefault(str(list(cq.numpy())), {})
 			# confentry[str(list(choice.numpy()))] = confentry.get(str(list(choice.numpy())),0)+1		
 			if choice >= 0:
 				confmat[i, choice_id] += 1		
-		print float(total_correct)/total
+		print(float(total_correct)/total)
 		np.save(confmat, 'confmat.npy')
 
 class RankingExperiment(OneofLExperiment):
@@ -450,7 +450,7 @@ class RankingExperiment(OneofLExperiment):
 			ctq = self.Qt[i]
 
 			if verbose:
-				print "running query for ", ctq, cq
+				print ("running query for ", ctq, cq)
 
 			total_hits = len(g_ids[g_ids == i])			
 			if total_hits == 0:
@@ -458,7 +458,7 @@ class RankingExperiment(OneofLExperiment):
 				continue
 
 			if verbose:
-				print 'total_hits =', total_hits
+				print ('total_hits =', total_hits)
 
 			ranking_labels = []
 			ranking_ids = []
@@ -491,7 +491,7 @@ class RankingExperiment(OneofLExperiment):
 					n_left = g_ids[g_ids == i].shape[0]
 					
 				if verbose:								
-					print r, csel, self.G[choice], choice_id, i, ap, n_left, g_ids.shape #self.P_GJct(csel), self.Gt[np.all(self.Gt == ctq, axis=1)].shape[0]
+					print (r, csel, self.G[choice], choice_id, i, ap, n_left, g_ids.shape) #self.P_GJct(csel), self.Gt[np.all(self.Gt == ctq, axis=1)].shape[0]
 				if n_left == 0:
 						break
 				if choice != -1:
@@ -503,7 +503,7 @@ class RankingExperiment(OneofLExperiment):
 			g_ids = full_g_ids		
 			np.savetxt('APs.txt', APs)
 			np.savetxt('RRs.txt', RRs)
-		print "MAP =",np.mean(APs), 'MRR =', np.mean(RRs)
+		print ("MAP =",np.mean(APs), 'MRR =', np.mean(RRs))
 
 if __name__ == '__main__':
 	# for NOISY_PROB in [0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1,0.0]:

@@ -30,7 +30,9 @@ def runVeriTest(toy=True, true_prob=0.9):
 	qset = zip(range(Q.shape[0]), range(G.shape[0]))
 	return e.test(qset, labels=labels, naive=True)
 
-def runIDTest((toy, true_prob)):	
+def runIDTest(args):
+	toy, true_prob = args
+
 	id_map, _ = loadVCMeta('data/vox1_meta.csv')
 	if toy:
 		VC, id_map, gdata, ids = buildToyDataset([(0,1),(0,5)], 3, 5)
@@ -39,7 +41,7 @@ def runIDTest((toy, true_prob)):
 	G, Q = id_map, gdata	
 	e = UniqueMatchExperiment(G, Q, true_prob=true_prob)
 	# print np.exp(e.P_H(np.array([[1,2],[1,2],[1,2],[1,2]]), np.array([[1,2],[0,2],[1,1],[0,1]])))
-	return e.test(ids, verbose=True, naiive=False)
+	return e.test(ids, verbose=False, naive=True)
 
 def runRankingTest(toy=True, true_prob=0.9):
 	id_map, _ = loadVCMeta('data/vox1_meta.csv')
@@ -57,7 +59,4 @@ def runRankingTest(toy=True, true_prob=0.9):
 	e = RankingExperiment(G, Q, true_prob=true_prob)
 	e.test(ids, verbose=False, naive=True, pool=P)
 
-
-
-
-print runRankingTest(True, 0.9)
+print (runIDTest((True, 0.9)))
