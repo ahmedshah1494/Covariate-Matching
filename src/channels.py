@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.stats import multivariate_normal
 
 class GaussianNoisyChannel(object):
     """docstring for NoisyChannel"""
@@ -22,7 +23,7 @@ class GaussianNoisyChannel(object):
 
     def pdf(self, ct, c):
         diff = ct - c
-        return self.noiseDist.log_prob(diff)
+        return multivariate_normal.pdf(diff, mean=self.mean, cov=self.cov)
 
 class IdentityNoisyChannel(object):
     """docstring for IdentityNoisyChannel"""

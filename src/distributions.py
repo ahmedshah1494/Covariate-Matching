@@ -30,6 +30,22 @@ class UniformVectorMultinomial(object):
     def pdf(self, x):       
         return np.zeros((x.shape[0],)) + np.log(1.0/self.N)
 
+class ContinuousUniformVectorMultinomial(object):
+    """docstring for ContinuousUniformVectorMultinomial"""
+    def __init__(self, low, high):
+        super(ContinuousUniformVectorMultinomial, self).__init__()
+        self.low = low
+        self.high = high
+        self.diff = high - low
+        self.p = 1.0/(high - low)
+    def pdf(self, x):
+        probs = np.zeros(x.shape)
+        probs[(x < self.low) & (x > self.high)] = 0
+        probs[(x >= self.low) & (x <= self.high)] = self.p
+        p = np.prod(probs, axis=-1)
+        return p
+        
+
 class VectorUniform(object):
     """docstring for VectorMultinomial"""
     def __init__(self, data=None, probs=None):
