@@ -1,5 +1,6 @@
 import numpy as np
 import itertools
+import logging
 
 def loadVCMeta(path, mappings=None):
     data = np.loadtxt(path, delimiter='\t', usecols=[2,3], skiprows=1, dtype=str)
@@ -69,11 +70,41 @@ def buildToyDataset(covRange, nIdsPerCov, nGalleryEntriesPerId):
     
     return VC, id_map, G, g_ids
 
+def oneHot2weight(v):
+    v += 1
+    s = np.sum(v)
+    for i in range(v.shape[0]):
+        v[i] = v[i]/s
+    return v
+
+def buildConToyDataset(covRange, nIdsPerCov, nGalleryEntriesPerId):
+    VC, id_map, G, g_ids = buildToyDataset(covRange, nIdsPerCov, nGalleryEntriesPerId)
+    N = len(id_map)
+    cov_data = []
+    for j, (_, maxval) in enumerate(covRange):
+        data_array = np.zeros((N, maxval + 1))
+        for i in range(N):
+            data_array[i, id_map[i][j]] = 1
+            data_array[i] = oneHot2weight(data_array[i])
+        cov_data.append(data_array)
+    return VC, cov_data, G, g_ids
+
+def main():
+    logger = logging.getLogger("Main")
+    data = buildConToyDataset([(0,1),(0,5)], 3, 10)
+    logger.debug("Result: %s", data)
+    pass
+
 if __name__ == '__main__':
-    id_mapping, cov_mappings = loadVCMeta('vox1_meta.csv')
-    ids, covariates = loadVCIDdata('iden_split.txt', id_mapping)
-    labels, pairs = loadVCVeriData('veri_test.txt', id_mapping)
-    VC, id_map, G, g_ids = buildToyDataset([(0,1),(0,5)], 3, 10)
-    print (VC.shape, id_map.shape, G.shape, g_ids.shape )
+    # id_mapping, cov_mappings = loadVCMeta('vox1_meta.csv')
+    # ids, covariates = loadVCIDdata('iden_split.txt', id_mapping)
+    # labels, pairs = loadVCVeriData('veri_test.txt', id_mapping)
+    # VC, id_map, G, g_ids = buildToyDataset([(0,1),(0,5)], 3, 10)
+    # print (VC.shape, id_map.shape, G.shape, g_ids.shape )
+    logging.basicConfig(level=logging.DEBUG,
+    format="%(name)s: %(message)s")
+    main()
+
+    
     
     
