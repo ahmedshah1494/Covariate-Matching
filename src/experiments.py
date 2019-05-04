@@ -189,8 +189,9 @@ class VerificationExperiment(Experiment):
         frs = (1-self.r) * np.exp(self.P_match)
         self.FA =  A.sum.sum(fas)
         self.FR = A.sum.sum(frs)        
-        objective = cp.Minimize(self.FA)
+        objective = cp.Minimize(self.FR)
         constraints = [self.FA == self.FR, self.r >= 0.000, self.r <= 1.000]
+        # constraints = [1-self.FR == 0.654, self.r >= 0.000, self.r <= 1.000]
         prob = cp.Problem(objective, constraints)
         prob.solve()
         # print("Optimal value", prob.solve())
