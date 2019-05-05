@@ -12,6 +12,7 @@ import cvxpy as cp
 import cvxpy.atoms.elementwise as E
 import cvxpy.atoms.affine as A
 
+from scipy import integrate
 from scipy.special import logsumexp
 from scipy.stats import expon, multinomial, multivariate_normal, norm
 from scipy.optimize import minimize
@@ -23,6 +24,7 @@ from data_processing import *
 from utils import *
 from distributions import *
 from channels import *
+import logging
 
 def getpct(pc, ct, sigma, lower, upper):
     return pc * integrate.quad(lambda c: mTruncnorm.pdf(ct, lower, upper, c, sigma), lower, upper)[0]
@@ -36,12 +38,14 @@ class ContinuousExperiment(object):
     """docstring for Experiment"""  
 
     def __init__(self, rangeVC, G=None, Q=None):
-        super(Experiment, self).__init__()
+        super(ContinuousExperiment, self).__init__()
         self.reset(rangeVC, G, Q)
 
     def reset(self, rangeVC, G, Q):
         self.G = G       
         self.Q = Q      
+
+        self.rangeVC = rangeVC
 
         
         self.PQ = ContinuousUniformVectorMultinomial(0, 1)
@@ -57,7 +61,7 @@ class ContinuousExperiment(object):
         # self.H = IdentityNoisyChannel()
         # self.H = RandomNoisyChannel(true_prob, self.VC)
         # self.H = IndependentRandomNoisyChannel(np.array([true_prob]*self.VC.shape[1]), self.VC)
-        self.P_H = self.H.pdf
+        self.P_H = self.H
         # self.J = IdentityNoisyChannel()
         self.J = TruncatedGaussianNoisyChannel(np.zeros(G.shape[1]), 
                                                 np.zeros(G.shape[1])+self.std_J,
@@ -65,7 +69,7 @@ class ContinuousExperiment(object):
                                                 [u for _,u in rangeVC])
         # self.J = RandomNoisyChannel(true_prob, self.VC)
         # self.J = IndependentRandomNoisyChannel(np.array([true_prob]*self.VC.shape[1]), self.VC)
-        self.P_J = self.J.pdf
+        self.P_J = self.J
 
 
         self.Qt = self.H(Q)
@@ -85,11 +89,12 @@ class ContinuousExperiment(object):
         self.Q = Q
         self.G = G
 
-class ClassificationExperiment(ContinuousExperiment):
+class ContinuousClassificationExperiment(ContinuousExperiment):
     """docstring for ClassificationExperiment"""
     def __init__(self, rangeVC, G, Q):
-        super(ClassificationExperiment, self).__init__(rangeVC, G, Q)
+        super(ContinuousClassificationExperiment, self).__init__(rangeVC, G, Q)
         self.N = float(len(G))
+        self.logger = logging.getLogger('ContinuousClassificationExperiment')
 
     def PCorrgCqCsel(self, ci, cseli, i):
         pj = self.P_J.pdf_i(cseli, ci, i)
@@ -98,11 +103,13 @@ class ClassificationExperiment(ContinuousExperiment):
         return pj*(1-(1-pgj)**self.N)/(self.N*pgj)
 
     def PCorrgCtqCsel(self, ct, csel):        
-        g = lambda cseli, cti, i: integrate.quad(lambda ci: self.P_QHcgct(ci, 
-                                                        cti, i) * self.PCorrgCqCsel(ci, 
-                                                        cseli, i), 
-                                                        self.rangeVC[i][0], 
-                                                        self.rangeVC[i][1])[0]
+        g = lambda cseli, cti, i: (
+            integrate.quad(
+            (lambda ci: self.P_QHcgct(ci, cti, i) * self.PCorrgCqCsel(ci, 
+                                                        cseli, i)), 
+            self.rangeVC[i][0], 
+            self.rangeVC[i][1])[0]
+        )
 
         return np.prod([g(cseli, cti, i) for i,(cseli, cti) in enumerate(zip(csel, ct))])
     
@@ -114,23 +121,40 @@ class ClassificationExperiment(ContinuousExperiment):
         D = np.sum(np.square(chat - Gt), axis=1)
         return np.argmin(D)
 
-    def run(self, labels):
+    def test(self, labels, verbose=False, naive=True):
         Qt = np.array(self.H.addNoise(self.Q))
         Gt = np.array(self.J.addNoise(self.G))
 
         correct = 0        
         for i,cpt in enumerate(self.Qt):
-            obj = lambda csel: -self.PCorrgCtqCsel(cpt, csel)
-            init_csel = self.genInitialVec()
-            res = minimize(obj, init_csel, bounds=self.rangeVC, method='L-BFGS-B')
-            print(res)
-            chat = res.x
+            if naive:
+                inferred = cpt
+            else:
+                obj = lambda csel: -self.PCorrgCtqCsel(cpt, csel)
+                init_csel = self.genInitialVec()
+                solverLBGFS = 'L-BFGS'
+                solverTNC = 'TNC'
+                solverSLSQP = 'SLSQP'
+                res = minimize(obj, init_csel, bounds=self.rangeVC, method=solverSLSQP)
+                print(res)
+                inferred = res.x
 
-            csel = self.getAnswer(chat, Gt)
-            correct += int(labels[i] == match_idx)
+            csel = self.getAnswer(inferred, Gt)
+            correct += int(labels[i] == csel)
 
-            print('accuracy: %0.4f, cp: %d, cpt:%d, csel:%d, cg:%d' % (correct/float(i+1),
-                                                                        Q[i],
+            # print('accuracy: %0.4f, cp: %d, cpt:%d, csel:%d, cg:%d' % (correct/float(i+1),
+            #                                                             self.Q[i],
+            #                                                             Qt[i],
+            #                                                             csel,
+            #                                                             self.G[i]))
+
+            self.logger.debug('accuracy: %s, cp: %s, cpt:%s, inferred:%s, cg:%s, cgt:%s', correct/float(i+1),
+                                                                        self.Q[i],
                                                                         Qt[i],
-                                                                        csel,
-                                                                        G[i]))
+                                                                        inferred,
+                                                                        Gt[csel],
+                                                                        self.G[csel])
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.DEBUG,
+    format="%(name)s: %(message)s")

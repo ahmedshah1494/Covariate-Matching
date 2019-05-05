@@ -1,6 +1,8 @@
 import numpy as np
 from src.data_processing import *
 from src.experiments import *
+from src.continuous_experiments import ContinuousClassificationExperiment
+import logging
 
 def runVeriTest(toy=True, true_prob=0.9):
     id_map, _ = loadVCMeta('data/vox1_meta.csv')
@@ -59,4 +61,24 @@ def runRankingTest(toy=True, true_prob=0.9):
     e = RankingExperiment(G, Q, true_prob=true_prob)
     e.test(ids, verbose=False, naive=True, pool=P)
 
-print (runIDTest((True, 0.9)))
+def runContinuousClassificationTest(toy=True):
+    # id_map, _ = loadVCMeta('data/vox1_meta.csv')
+    rangeVC = [(0,1),(0,5)]
+    if toy:
+        VC, id_map, gdata, ids = buildFloatingToyDataset(rangeVC, 3, 5)
+    else:
+        # ids, gdata = loadVCIDdata('data/iden_split.txt', id_map)    
+        pass
+    G, Q = id_map, gdata 
+    e = ContinuousClassificationExperiment(rangeVC, G, Q)
+    # print np.exp(e.P_H(np.array([[1,2],[1,2],[1,2],[1,2]]), np.array([[1,2],[0,2],[1,1],[0,1]])))
+    return e.test(ids, verbose=False, naive=False)
+
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.DEBUG,
+    format="%(name)s: %(message)s")
+    print(runContinuousClassificationTest(toy=True))
+
+# print (runIDTest((True, 0.9)))
+# print(runContinuousClassificationTest(toy=True))

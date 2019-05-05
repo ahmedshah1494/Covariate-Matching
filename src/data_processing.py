@@ -71,7 +71,8 @@ def buildToyDataset(covRange, nIdsPerCov, nGalleryEntriesPerId):
     return VC, id_map, G, g_ids
 
 def buildFloatingToyDataset(covRange, nIdsPerCov, nGalleryEntriesPerId):
-    return buildToyDataset(covRange, nIdsPerCov, nGalleryEntriesPerId).astype('float32')
+    VC, id_map, G, g_ids = buildToyDataset(covRange, nIdsPerCov, nGalleryEntriesPerId)
+    return VC, id_map.astype('float64'), G.astype('float64'), g_ids
 
 def oneHot2weight(v):
     v += 1
