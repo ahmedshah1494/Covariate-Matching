@@ -32,7 +32,7 @@ class TruncatedGaussianNoisyChannel(object):
         for i in range(len(noisy_x)):
             for j in range(len(noisy_x[i])):
                 c = noisy_x[i][j]
-                eps = mTruncnorm.rvs(self.low[j]-c, self.high[j]-c, loc=self.mean[j], scale=self.std[i])                
+                eps = mTruncnorm.rvs(self.low[j]-c, self.high[j]-c, loc=self.mean[j], scale=self.std[j])                
                 noisy_x[i][j] += eps
         if len(x.shape) == 1:
             return noisy_x[0]

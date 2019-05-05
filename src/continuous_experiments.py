@@ -132,10 +132,10 @@ class ContinuousClassificationExperiment(ContinuousExperiment):
             else:
                 obj = lambda csel: -self.PCorrgCtqCsel(cpt, csel)
                 init_csel = self.genInitialVec()
-                solverLBGFS = 'L-BFGS'
+                solverLBFGSB = 'L-BFGS-B'
                 solverTNC = 'TNC'
                 solverSLSQP = 'SLSQP'
-                res = minimize(obj, init_csel, bounds=self.rangeVC, method=solverSLSQP)
+                res = minimize(obj, init_csel, bounds=self.rangeVC, method=solverLBFGSB)
                 print(res)
                 inferred = res.x
 
