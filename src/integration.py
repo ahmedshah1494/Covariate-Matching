@@ -4,6 +4,7 @@ from scipy import integrate
 from scipy import misc
 from scipy.optimize import minimize_scalar
 from scipy.stats import truncnorm
+from scipy.stats import norm
 
 import time
 def pcorrgcselcpt(cpt, csel, mu1, sigma1, mu2, sigma2):
@@ -25,8 +26,8 @@ def f(x):
 # def pQHcpt(cpt, pcp, sigma, upper, lower):
 # 	return pcp * integrate.quad(pcptgivencp(cpt, sigma, upper, lower), lower, upper)[0]
 
-# def pcptgivencp(cpt, sigma, upper, lower):
-# 	return lambda cp: (1 / np.sqrt(2 * np.pi) * (np.exp(- ((cpt - cp)**2) / (2 * (sigma**2))))) / (0.5 * sigma * (scipy.special.erf((upper - cp)/(sigma * np.sqrt(2))) - scipy.special.erf((lower - cp)/(sigma * np.sqrt(2)))))
+def pcptgivencp(cpt, sigma, upper, lower):
+	return lambda cp: (1 / np.sqrt(2 * np.pi) * (np.exp(- ((cpt - cp)**2) / (2 * (sigma**2))))) / (0.5 * sigma * (scipy.special.erf((upper - cp)/(sigma * np.sqrt(2))) - scipy.special.erf((lower - cp)/(sigma * np.sqrt(2)))))
 
 def easypQHcpt(pcp, cpt, sigma, lower, upper):
 	return pcp * integrate.quad(lambda cp: truncnorm.pdf(cpt, lower, upper, cp, sigma), lower, upper)[0]
@@ -34,11 +35,24 @@ def easypQHcpt(pcp, cpt, sigma, lower, upper):
 def doubleIntegralExample():
 	return integrate.quad(lambda y: integrate.quad(lambda x: x + 2 + y, 0, 0.5)[0], 0, 1)
 
+
+# def truncated_normal(x, a, b, loc=0, scale=1):
+# 	return norm.pdf(x, loc=loc, scale=scale)/ ((norm.cdf(b, loc=loc, scale=scale)) - (norm.cdf(a, loc=loc, scale=scale)))
+
+def truncated_normal(x, a, b, loc=0, scale=1):
+	return truncnorm.pdf(x, (a - loc)/scale, (b - loc)/scale, loc=loc, scale=scale)
+
+
+# print(pcptgivencp(2, 1, 5, 1)(4))
 # def _probAgivenB()
 
 
 # print(pQHcpt(2, 1, 1, 2, 0))
 # print(easypQHcpt(2, 1, 1, 2, 0))
-print(easypQHcpt(1, 3, 1, 0, 2))
+# print(easypQHcpt(1, 3, 1, 0, 2))
 
 # print("Answer:", doubleIntegralExample())
+
+# print(truncnorm.pdf(x=5, a=1, b=5, loc=4, scale=1))
+
+print(truncated_normal(2, 1, 5, 4))
