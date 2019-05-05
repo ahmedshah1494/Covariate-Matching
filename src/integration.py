@@ -18,4 +18,18 @@ def f(x):
 
 
 # print misc.derivative(f, 1.0, dx=1e-6)
-print(minimize_scalar(f, bounds=(0, 1), method='bounded'))
+# print(minimize_scalar(f, bounds=(0, 1), method='bounded'))
+
+
+def pQHcpt(cpt, pcp, sigma, upper, lower):
+	return pcp * integrate.quad(pcptgivencp(cpt, sigma, upper, lower), lower, upper)[0]
+
+def pcptgivencp(cpt, sigma, upper, lower):
+	return lambda cp: (1 / np.sqrt(2 * np.pi) * (np.exp(- ((cpt - cp)**2) / (2 * (sigma**2))))) / (0.5 * sigma * (scipy.special.erf((upper - cp)/(sigma * np.sqrt(2))) - scipy.special.erf((lower - cp)/(sigma * np.sqrt(2)))))
+
+
+def doubleIntegralExample():
+	return integrate.quad(lambda y: integrate.quad(lambda x: x + 2 + y, 0, 0.5)[0], 0, 1)
+# print(pQHcpt(1, 0.5, 1, 2, 0))
+
+print("Answer:", doubleIntegralExample())
