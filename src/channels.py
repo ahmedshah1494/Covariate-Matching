@@ -45,12 +45,13 @@ class TruncatedGaussianNoisyChannel(object):
     def pdf(self, ct, c):
         probs = []
         for i, (cti, ci) in enumerate(zip(ct, c)):            
-            probs.append(mTruncnorm.pdf(cti, self.low[i], self.high[i], loc=ci))            
-            print(cti, ci, self.low[i], self.high[i])
-        print(probs)
-        probs = np.prod(probs)
+            probs.append(mTruncnorm.pdf(cti, self.low[i], self.high[i], loc=ci, scale=self.std[i]))            
+            
+        # probs = np.prod(probs)
         return probs
-        
+
+    def pdf_i(self, cti, ci, i):
+        mTruncnorm.pdf(cti, self.low[i], self.high[i], loc=ci, scale=self.std[i])
 
 class IdentityNoisyChannel(object):
     """docstring for IdentityNoisyChannel"""
