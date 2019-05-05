@@ -1,29 +1,35 @@
 import numpy as np
-from scipy.stats import multivariate_normal
+from scipy.stats import multivariate_normal, trucnorm
 
-class GaussianNoisyChannel(object):
-    """docstring for NoisyChannel"""
-    def __init__(self, mean, cov, clip_range=None):
-        super(NoisyChannel, self).__init__()        
+class TruncatedGaussianNoisyChannel(object):
+    """docstring for GaussianNoisyChannel"""
+    def __init__(self, mean, std, low, high):
+        super(GaussianNoisyChannel, self).__init__()
+        self.low = low
+        self.high = high
         self.mean = mean
-        self.cov = cov
-        self.clip_range = clip_range
+        self.std = std
 
     def addNoise(self, x):
-        noisy = x + np.random.multivariate_normal(self.mean, self.cov, size=n)
-        if self.clip_range is not None:
-            noisy = noisy.T
-            for i in range(noisy.shape[0]):
-                noisy[i] = np.clip(noisy[i], a_min=self.clip_range[i][0], a_max=self.clip_range[i][1])
-            noisy = noisy.T
-        return noisy
-
-    def __call__(self, x):
-        return self.addNoise(x)
-
+        noisy_x = x.copy()
+        if len(noisy_x.shape) == 1:
+            noisy_x = [noisy_x]
+        for i in range(len(noisy_x)):
+            for j in range(len(noisy_x[i])):
+                c = noisy_x[i][j]
+                eps = trucnorm.rvs(self.low[j]-c, self.high[j]-c, loc=self.mean, scale=1)
+                noisy_x[i][j] += eps
+        if len(x.shape) == 1:
+            return noisy_x[0]
+        else:
+            return noisy_x  
+            
     def pdf(self, ct, c):
-        diff = ct - c
-        return multivariate_normal.pdf(diff, mean=self.mean, cov=self.cov)
+        probs = []
+        for i, (cti, ci) in enumerate(zip(ct, c)):
+            probs.append(trucnorm.pdf(cti, self.low[i], self.high[i], loc=ci))
+        return probs
+        
 
 class IdentityNoisyChannel(object):
     """docstring for IdentityNoisyChannel"""

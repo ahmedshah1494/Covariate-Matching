@@ -37,13 +37,19 @@ class ContinuousExperiment(object):
         self.PQ = ContinuousUniformVectorMultinomial(0, 1)
         self.PG = ContinuousUniformVectorMultinomial(0, 1)
 
-        self.H = GaussianNoisyChannel(np.zeros(Q.shape[1]), np.identity(Q.shape[1]), rangeVC)
+        self.H = TruncatedGaussianNoisyChannel(np.zeros(Q.shape[1]), 
+                                                np.identity(Q.shape[1]),
+                                                [l for l,_ in rangeVC],
+                                                [u for _,u in rangeVC])
         # self.H = IdentityNoisyChannel()
         # self.H = RandomNoisyChannel(true_prob, self.VC)
         # self.H = IndependentRandomNoisyChannel(np.array([true_prob]*self.VC.shape[1]), self.VC)
         self.P_H = self.H.pdf
         # self.J = IdentityNoisyChannel()
-        self.J = GaussianNoisyChannel(np.zeros(G.shape[1]), np.identity(G.shape[1]), rangeVC)
+        self.J = TruncatedGaussianNoisyChannel(np.zeros(G.shape[1]), 
+                                                np.identity(G.shape[1]),
+                                                [l for l,_ in rangeVC],
+                                                [u for _,u in rangeVC])
         # self.J = RandomNoisyChannel(true_prob, self.VC)
         # self.J = IndependentRandomNoisyChannel(np.array([true_prob]*self.VC.shape[1]), self.VC)
         self.P_J = self.J.pdf
