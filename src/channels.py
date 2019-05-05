@@ -1,10 +1,25 @@
 import numpy as np
-from scipy.stats import multivariate_normal, trucnorm
+from scipy.stats import multivariate_normal, truncnorm
+
+class mTruncnorm(object):
+    @staticmethod
+    def rvs(a, b, loc=0, scale=1):
+        a = float(a)
+        b = float(b)
+        return truncnorm.rvs((a-loc)/scale, (b-loc)/scale, loc=loc, scale=scale)
+
+    @staticmethod
+    def pdf(x, a, b, loc=0, scale=1):        
+        a = float(a)
+        b = float(b)
+        x = float(x)
+        p = truncnorm.pdf(x, (a - loc)/scale, (b - loc)/scale, loc=loc, scale=scale)
+        return p
 
 class TruncatedGaussianNoisyChannel(object):
     """docstring for GaussianNoisyChannel"""
     def __init__(self, mean, std, low, high):
-        super(GaussianNoisyChannel, self).__init__()
+        super(TruncatedGaussianNoisyChannel, self).__init__()
         self.low = low
         self.high = high
         self.mean = mean
@@ -17,17 +32,23 @@ class TruncatedGaussianNoisyChannel(object):
         for i in range(len(noisy_x)):
             for j in range(len(noisy_x[i])):
                 c = noisy_x[i][j]
-                eps = trucnorm.rvs(self.low[j]-c, self.high[j]-c, loc=self.mean, scale=1)
+                eps = mTruncnorm.rvs(self.low[j]-c, self.high[j]-c, loc=self.mean[j], scale=1)                
                 noisy_x[i][j] += eps
         if len(x.shape) == 1:
             return noisy_x[0]
         else:
-            return noisy_x  
+            return noisy_x
+
+    def __call__(self, x):
+        return self.addNoise(x)  
             
     def pdf(self, ct, c):
         probs = []
-        for i, (cti, ci) in enumerate(zip(ct, c)):
-            probs.append(trucnorm.pdf(cti, self.low[i], self.high[i], loc=ci))
+        for i, (cti, ci) in enumerate(zip(ct, c)):            
+            probs.append(mTruncnorm.pdf(cti, self.low[i], self.high[i], loc=ci))            
+            print(cti, ci, self.low[i], self.high[i])
+        print(probs)
+        probs = np.prod(probs)
         return probs
         
 
@@ -121,3 +142,13 @@ class IndependentRandomNoisyChannel(object):
             p = (nz * self.true_prob) + ((1-nz) * (self.noisy_prob))
             p = np.sum(np.log(p), axis=1)
             return p
+
+if __name__ == '__main__':
+    d = TruncatedGaussianNoisyChannel(np.zeros((2,)), np.identity(2), [1.,3.],[5.,7.])
+    c = np.array([2.,5.])
+    ct = np.array([4.,6.])
+    print(d(c))
+    print(d.pdf(c, ct))
+
+    print(mTruncnorm.pdf(2., 1., 5., loc=4.0))
+    print(mTruncnorm.rvs(1., 5., loc=4.0))
