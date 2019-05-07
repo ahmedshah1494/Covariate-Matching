@@ -54,13 +54,13 @@ class Experiment(object):
 
         # self.H = GaussianNoisyChannel(torch.zeros(Q.shape[1]), torch.tensor([[0.5,0],[0,5]]), rangeVC)
         # self.H = IdentityNoisyChannel()
-        # self.H = RandomNoisyChannel(true_prob, self.VC)
-        self.H = IndependentRandomNoisyChannel(np.array([true_prob]*self.VC.shape[1]), self.VC)
+        self.H = RandomNoisyChannel(true_prob, self.VC)
+        # self.H = IndependentRandomNoisyChannel(np.array([true_prob]*self.VC.shape[1]), self.VC)
         self.P_H = self.H.pdf
         # self.J = IdentityNoisyChannel()
         # self.J = GaussianNoisyChannel(torch.zeros(G.shape[1]), torch.tensor([[0.5,0],[0,7]]), rangeVC)
-        # self.J = RandomNoisyChannel(true_prob, self.VC)
-        self.J = IndependentRandomNoisyChannel(np.array([true_prob]*self.VC.shape[1]), self.VC)
+        self.J = RandomNoisyChannel(true_prob, self.VC)
+        # self.J = IndependentRandomNoisyChannel(np.array([true_prob]*self.VC.shape[1]), self.VC)
         self.P_J = self.J.pdf
 
 

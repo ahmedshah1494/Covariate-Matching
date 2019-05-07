@@ -30,7 +30,7 @@ def runVeriTest(toy=True, true_prob=0.9):
     VC = np.array([[x,y] for x,y in itertools.product(*rangeVC)])
     e = VerificationExperiment(VC, G, Q, true_prob=true_prob)
     qset = zip(range(Q.shape[0]), range(G.shape[0]))
-    return e.test(qset, labels=labels, naive=True)
+    return e.test(qset, labels=labels, naive=False)
 
 def runIDTest(args):
     toy, true_prob = args
@@ -79,8 +79,9 @@ def runContinuousClassificationTest(toy=True):
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG,
     format="%(name)s: %(message)s")
-    # print(runContinuousClassificationTest(toy=False))
-    print(runVeriTest(toy=False))
+
+    # print(runContinuousClassificationTest(toy=True))
+    print(runVeriTest(toy=False, true_prob=0.9))
 
 # print (runIDTest((True, 0.9)))
 # print(runContinuousClassificationTest(toy=True))

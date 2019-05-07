@@ -26,9 +26,13 @@ class UniformVectorMultinomial(object):
     """docstring for UniformVectorMultinomial"""
     def __init__(self, data):       
         super(UniformVectorMultinomial, self).__init__()
-        self.N = reduce(lambda x,y: x*y, [len(set(data[:,i].tolist())) for i in range(data.shape[1])])      
-    def pdf(self, x):       
-        return np.zeros((x.shape[0],)) + np.log(1.0/self.N)
+        self.N = reduce(lambda x,y: x*y, [len(set(data[:,i].tolist())) for i in range(data.shape[1])])
+        self.lower = np.min(data, axis=0)
+        self.upper = np.max(data, axis=0)
+
+    def pdf(self, x):
+        p = np.prod((x >= self.lower) * (x <= self.upper), 1) * np.log(1.0/self.N)         
+        return p
 
 class ContinuousUniformVectorMultinomial(object):
     """docstring for ContinuousUniformVectorMultinomial"""
