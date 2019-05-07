@@ -49,8 +49,8 @@ class Experiment(object):
         self.VC_G = self.filter_VC(self.G)      
 
         
-        self.PQ = UniformVectorMultinomial(Q)
-        self.PG = UniformVectorMultinomial(G)
+        self.PQ = VectorMultinomial(Q)
+        self.PG = VectorMultinomial(G)
 
         # self.H = GaussianNoisyChannel(torch.zeros(Q.shape[1]), torch.tensor([[0.5,0],[0,5]]), rangeVC)
         # self.H = IdentityNoisyChannel()
@@ -157,6 +157,9 @@ class VerificationExperiment(Experiment):
         # self.P_mismatch = lambda ctq, ctg: log_sum_exp([self.P_H(ctq,cq)+self.P_J(ctg,cg)+self.PQ.pdf(cq)+self.PG.pdf(cg)  for (cq,cg) in itertools.product(self.VC,self.VC)])                
         self.P_mismatch = np.zeros((self.VC.shape[0], self.VC.shape[0]))
         self.P_match = np.zeros((self.VC.shape[0], self.VC.shape[0]))
+
+        # self.PQ = UniformVectorMultinomial(self.VC)
+        # self.PG = UniformVectorMultinomial(self.VC)
         
         cov_pairs = [x for x in itertools.product(range(self.VC.shape[0]),range(self.VC.shape[0]))]
         P_H = np.array([self.P_H(self.VC[i],self.VC[j]) for (i, j) in cov_pairs]).reshape(self.VC.shape[0], self.VC.shape[0])

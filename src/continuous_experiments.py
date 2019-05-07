@@ -220,11 +220,12 @@ class ContinuousVerificationExperiment(ContinuousExperiment):
 
     #size of lambda vector is no. of covariates + 1
     def objective_function(self, lambda_vector):
-        return (self.FA(lambda_vector[:-1]) * (1 - lambda_vector[-1])) * (lambda_vector[-1] * self.FR(lambda_vector[:-1]))
+        return (self.FA(lambda_vector[:-1]) * (1 - lambda_vector[-1])) + (lambda_vector[-1] * self.FR(lambda_vector[:-1]))
 
     def learn_lambdas(self):
         solverSLSQP = 'SLSQP'
         res = minimize(self.objective_function, self.genInitialVec(), method=solverSLSQP, tol=1e-2)
+        print(res)
         lambdas = res.x[:-1]
         return lambdas
 
@@ -232,35 +233,36 @@ class ContinuousVerificationExperiment(ContinuousExperiment):
         assert(len(qset) == len(labels))
 
         lambdas = self.learn_lambdas()
+        print(lambdas)
+
+        # lambdas = np.array([0.37236356, 0.29762754])
 
         correct_pos = 0.0
         correct_neg = 0.0
         total_pos = 0.0
         total_neg = 0.0
         i = 0
-        for (i_ctq, i_ctg) in qset:       
-            p = [r(self.Qt[i_ctq, i], self.Gt[i_ctg, i], lambdas[i]) for i in range(self.Gt.shape[1])]
+        for i, (i_ctq, i_ctg) in enumerate(qset):       
+            p = [r(self.Qt[i_ctq, j], self.Gt[i_ctg, j], lambdas[j]) for j in range(self.Gt.shape[1])]
             p = np.prod(p)
             flip = np.random.binomial(1, p)
             # flip = int(np.all(self.Qt[i_ctq] == self.Gt[i_ctg]))
             if labels[i]:
                 if naive:
-                    pass
-                    # correct_pos += (i_ctq_vc == i_ctg_vc)
+                    correct_pos += int(np.allclose(self.Qt[i_ctq], self.Gt[i_ctg]))
                 else:
                     correct_pos += int(flip == labels[i])
                 total_pos += 1  
             else:
                 if naive:
-                    # correct_neg += (i_ctq_vc != i_ctg_vc)
-                    pass
+                    correct_neg += int(not np.allclose(self.Qt[i_ctq], self.Gt[i_ctg]))
                 else:
                     correct_neg += int(flip == labels[i])
                 total_neg += 1
             if verbose and i > 0 and min(total_pos, total_neg) > 0 and i % 1000 == 0:               
                 # print (i, self.Q[i_ctq], self.Qt[i_ctq], self.G[i_ctg], self.Gt[i_ctg], self.r[i_ctq_vc, i_ctg_vc], flip, labels[i])
-                print (correct_pos/total_pos,correct_neg/total_neg, (correct_pos+correct_neg)/(total_pos+total_neg))
-            i+=1
+                print (correct_pos/total_pos,correct_neg/total_neg, (correct_pos+correct_neg)/(total_pos+total_neg)) 
+        print ((correct_pos/total_pos),correct_neg/total_neg, (correct_pos+correct_neg)/(total_pos+total_neg))
         return (correct_pos+correct_neg)/(total_pos+total_neg)
 
 
