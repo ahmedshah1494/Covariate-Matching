@@ -79,7 +79,8 @@ def runContinuousClassificationTest(toy=True):
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG,
     format="%(name)s: %(message)s")
-    print(runContinuousClassificationTest(toy=False))
+    # print(runContinuousClassificationTest(toy=False))
+    print(runVeriTest(toy=False))
 
 # print (runIDTest((True, 0.9)))
 # print(runContinuousClassificationTest(toy=True))
