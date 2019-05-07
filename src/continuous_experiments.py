@@ -224,7 +224,7 @@ class ContinuousVerificationExperiment(ContinuousExperiment):
 
     def learn_lambdas(self):
         solverSLSQP = 'SLSQP'
-        res = minimize(self.objective_function, self.genInitialVec(), method=solverSLSQP)
+        res = minimize(self.objective_function, self.genInitialVec(), method=solverSLSQP, tol=1e-2)
         lambdas = res.x[:-1]
         return lambdas
 
