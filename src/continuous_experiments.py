@@ -102,10 +102,27 @@ class ContinuousClassificationExperiment(ContinuousExperiment):
 
         return pj*(1-(1-pgj)**self.N)/(self.N*pgj)
 
+    def PCorrgCqCsel_logged(self, ci, cseli, i):
+        pj = self.P_J.pdf_i(cseli, ci, i)
+        pgj = min(self.P_GJct(cseli, i), 1)
+
+        return (pj - np.exp(np.log(pj) + (self.N * np.log(1 - pgj)))) / (self.N * pgj)
+
+        # return pj*(1-(1-pgj)**self.N)/(self.N*pgj)
+
     def PCorrgCtqCsel(self, ct, csel):        
+        
+        # g = lambda cseli, cti, i: (
+        #     integrate.quad(
+        #     (lambda ci: self.P_QHcgct(ci, cti, i) * self.PCorrgCqCsel(ci, 
+        #                                                 cseli, i)), 
+        #     self.rangeVC[i][0], 
+        #     self.rangeVC[i][1])[0]
+        # )
+
         g = lambda cseli, cti, i: (
             integrate.quad(
-            (lambda ci: self.P_QHcgct(ci, cti, i) * self.PCorrgCqCsel(ci, 
+            (lambda ci: self.P_QHcgct(ci, cti, i) * self.PCorrgCqCsel_logged(ci, 
                                                         cseli, i)), 
             self.rangeVC[i][0], 
             self.rangeVC[i][1])[0]
@@ -135,7 +152,7 @@ class ContinuousClassificationExperiment(ContinuousExperiment):
                 solverLBFGSB = 'L-BFGS-B'
                 solverTNC = 'TNC'
                 solverSLSQP = 'SLSQP'
-                res = minimize(obj, init_csel, bounds=self.rangeVC, method=solverLBFGSB)
+                res = minimize(obj, init_csel, bounds=self.rangeVC, method=solverSLSQP)
                 print(res)
                 inferred = res.x
 

@@ -62,13 +62,14 @@ def runRankingTest(toy=True, true_prob=0.9):
     e.test(ids, verbose=False, naive=True, pool=P)
 
 def runContinuousClassificationTest(toy=True):
-    # id_map, _ = loadVCMeta('data/vox1_meta.csv')
+    id_map, _ = loadVCMeta('data/vox1_meta.csv')
+    id_map = id_map.astype('float64')
     rangeVC = [(0,1),(0,5)]
     if toy:
         VC, id_map, gdata, ids = buildFloatingToyDataset(rangeVC, 3, 5)
     else:
-        # ids, gdata = loadVCIDdata('data/iden_split.txt', id_map)    
-        pass
+        ids, gdata = loadVCIDdata('data/iden_split.txt', id_map)    
+        gdata = gdata.astype('float64')
     G, Q = id_map, gdata 
     e = ContinuousClassificationExperiment(rangeVC, G, Q)
     # print np.exp(e.P_H(np.array([[1,2],[1,2],[1,2],[1,2]]), np.array([[1,2],[0,2],[1,1],[0,1]])))
