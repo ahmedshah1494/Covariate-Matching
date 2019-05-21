@@ -1,6 +1,7 @@
 import numpy as np
 import itertools
 import logging
+import pandas as pd
 
 def loadVCMeta(path, mappings=None):
     data = np.loadtxt(path, delimiter='\t', usecols=[2,3], skiprows=1, dtype=str)
@@ -93,6 +94,105 @@ def buildConToyDataset(covRange, nIdsPerCov, nGalleryEntriesPerId):
         cov_data.append(data_array)
     return VC, cov_data, G, g_ids
 
+def loadSREMeta(path, quantization_bucket_size=10, n_ids=-1, seed=0):
+    selected_cols = ['subjid', 'sex', 'year_of_birth', 'native_language', 'smoker', 'height_cm', 'weight_kg']
+    selected_cols = ['subjid', 'sex', 'year_of_birth', 'native_language', 'smoker']
+    data = pd.read_csv(path)    
+    data = data[selected_cols]    
+    
+    np.random.seed(seed)
+    np.random.shuffle(data.values)
+
+    # data = data.sample(frac=1.0, random_state=seed)
+
+    if n_ids == -1:
+        n_ids = len(data)    
+
+    mappings = []
+
+    for col in selected_cols[1:]:        
+        mapping = {}
+        values = data[col].values
+        if col in ['year_of_birth', 'height_cm', 'weight_kg']:
+            values = values[~np.isnan(values)]
+
+            if col == 'year_of_birth':
+                min_yob = values.min()
+                print values.min(), values.max()
+            if col == 'height_cm':
+                min_height = values.min()
+            else:
+                min_weight = values.min()
+
+            values = (values - values.min()) / quantization_bucket_size
+            values = values.round().astype('int32')
+            
+        elif col == 'smoker':
+            values[values != 'Y'] = 'N'
+
+        for i in range(len(values)):
+            if type(values[i]) == str or not np.isnan(values[i]):
+                mapping.setdefault(values[i], len(mapping))
+        mappings.append(mapping)
+    
+    covariates = []
+    id2idx = {}
+    mappings = [id2idx] + mappings
+    
+    for i in range(len(data)):
+        if len(covariates) >= n_ids:
+            break
+        row = data.iloc[i]
+        if len([v for v in row.values if type(v) != str and np.isnan(v)]) == 0:
+            id2idx.setdefault(row['subjid'], len(id2idx))
+            cov = []
+            for k,col in enumerate(selected_cols):
+                v = row[col]
+                if col == 'year_of_birth':    
+                    v = (v - min_yob)/quantization_bucket_size
+                    v = round(v)
+                if col == 'height_cm':
+                    v = (v - min_height)/quantization_bucket_size
+                    v = round(v)
+                if col == 'weight_kg':                    
+                    v = (v - min_weight)/quantization_bucket_size
+                    v = round(v)
+                cov.append(mappings[k][v])
+            covariates.append(cov)
+    covariates = sorted(covariates, key=lambda x: x[0])
+    covariates = np.array(covariates)
+    # print covariates[:5]
+    # print mappings
+    return covariates[:, 1:], mappings
+
+def loadSREDvecs(mdvec_path, fdvec_path):
+    mvecs = np.load(mdvec_path)
+    fvecs = np.load(fdvec_path)
+    return np.concatenate((mvecs, fvecs), axis=0)
+
+def loadSREIds(mid_path, fid_path):
+    mid = np.load(mid_path)
+    fid = np.load(fid_path)
+    return np.concatenate((mid, fid), axis=0)
+
+def loadSREIDData(ids, id_map, mappings):
+    id_mapping = mappings[0]
+    ids = np.array([mappings[0][id] for id in ids if id in id_mapping])
+
+    covariates = np.array([id_map[i] for i in ids])
+    
+    np.random.seed(0)
+    shuffled_idxs = np.arange(len(ids))
+    np.random.shuffle(shuffled_idxs)
+
+    covariates = covariates[shuffled_idxs]
+    ids = ids[shuffled_idxs]
+    
+    # print ids[:5]
+    # print covariates.shape
+
+    return ids, covariates
+
 def main():
     logger = logging.getLogger("Main")
     data = buildConToyDataset([(0,1),(0,5)], 3, 10)
@@ -107,8 +207,10 @@ if __name__ == '__main__':
     # print (VC.shape, id_map.shape, G.shape, g_ids.shape )
     logging.basicConfig(level=logging.DEBUG,
     format="%(name)s: %(message)s")
-    main()
-
+    # main()
+    id_map, mappings = loadSREMeta('../SRE/raw/NIST_SRE08_speaker.csv')
+    # ids = loadSREIds('../SRE/sre08/sre08_male_sids.npy', '../SRE/sre08/sre08_female_sids.npy').astype('int32')
+    # loadSREIDData(ids, id_map, mappings)
     
     
     

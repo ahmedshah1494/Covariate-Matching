@@ -20,7 +20,8 @@ class VectorMultinomial(object):
     def pdf(self,x):    
         if len(x.shape) < 2:
             x = np.expand_dims(x, 0)
-        return [np.sum([np.log(self.probs[i][y[i]] if y[i] < len(self.probs[i]) else 1e-20) for i in range(len(y))]) for y in x]
+        p = [np.sum([np.log(self.probs[i][y[i]] if y[i] < len(self.probs[i]) else 1e-20) for i in range(len(y))]) for y in x]
+        return np.array(p)
 
 class UniformVectorMultinomial(object):
     """docstring for UniformVectorMultinomial"""

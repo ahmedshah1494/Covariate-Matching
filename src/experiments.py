@@ -32,7 +32,7 @@ class Experiment(object):
     def reset(self, VC, G=None, Q=None, true_prob=0.9):
         self.VC = VC        
         rangeVC = [(VC[:,[i]].min(), VC[:,[i]].max()) for i in range(self.VC.shape[1])]
-
+        print (true_prob)
         if G is None:
             self.G = self.VC#.repeat(10,1)
         else:
@@ -73,12 +73,12 @@ class Experiment(object):
         self.P_QHct = lambda ct: logsumexp(PQ_Q + self. P_H(ct,self.VC))
         self.P_QHcgct = lambda c,ct: (self.PQ.pdf(c)+self.P_H(ct,c)-self.P_QHct(ct))
 
-        self.PG_G = self.PG.pdf(self.VC_G)      
+        self.PG_G = self.PG.pdf(self.VC_G)       
         self.P_GJct = lambda ct: logsumexp(self.PG_G + self.P_J(ct,self.VC_G))
         self.P_GJcgct = lambda c,ct: self.PG.pdf([c])+self.P_J(ct,c)-self.P_GJct(ct)        
 
         self.Q = Q
-        self.G = G
+        self.G = G        
 
     def updateGallery(self, remove_idices):
         self.G = np.delete(self.G, remove_idices, axis=0)
@@ -87,15 +87,15 @@ class Experiment(object):
         self.PG = VectorMultinomial(self.G)
 
         self.VC_G = self.filter_VC(self.G)
-        self.PG_G = self.PG.pdf(self.VC_G)
+        self.PG_G = self.PG.pdf(self.VC_G)        
 
-        self.VC_Gt = self.filter_VC(self.Gt)
+        self.VC_Gt = self.filter_VC(self.Gt)            
 
 class UniqueMatchExperiment(Experiment):
     """docstring for UniqueMatchExperiment"""
     def __init__(self, G, Q=None, true_prob=0.9):
         rangeVC = [np.arange(G[:,[i]].min(), G[:,[i]].max()+1) for i in range(G.shape[1])]      
-        VC = np.array([[x,y] for x,y in itertools.product(*rangeVC)])
+        VC = np.array([list(v) for v in itertools.product(*rangeVC)])
 
         super(UniqueMatchExperiment, self).__init__(VC, G, Q, true_prob=true_prob)
 
@@ -147,7 +147,7 @@ class UniqueMatchExperiment(Experiment):
 
 class VerificationExperiment(Experiment):
     """docstring for VerificationExperiment"""
-    def __init__(self, VC, G, Q=None, true_prob=0.9):       
+    def __init__(self, VC, G, Q=None, true_prob=0.9, FA=None, FR=None):       
         # rangeVC = [np.arange(G[:,[i]].min(), G[:,[i]].max()+1) for i in range(G.shape[1])]        
         # VC = np.array([[x,y] for x,y in itertools.product(*rangeVC)])
         # print rangeVC
@@ -166,8 +166,8 @@ class VerificationExperiment(Experiment):
         P_J = np.array([self.P_J(self.VC[i],self.VC[j]) for (i, j) in cov_pairs]).reshape(self.VC.shape[0], self.VC.shape[0])
         PG = self.PG.pdf(self.VC)
         PQ = self.PQ.pdf(self.VC)
-        print(np.exp(P_J))
-        print (np.sum(np.exp(P_J), axis=1), np.sum(np.exp(P_H), axis=1))
+        # print(np.exp(P_J))
+        # print (np.sum(np.exp(P_J), axis=1), np.sum(np.exp(P_H), axis=1))
 
         for (i_ctq, i_ctg) in cov_pairs:
             p_match = []
@@ -184,7 +184,7 @@ class VerificationExperiment(Experiment):
 
         self.P_mismatch = self.P_mismatch.reshape(-1)
         self.P_match = self.P_match.reshape(-1)
-        print (np.sum(np.exp(self.P_mismatch)), np.sum(np.exp(self.P_match)))
+        # print (np.sum(np.exp(self.P_mismatch)), np.sum(np.exp(self.P_match)))
 
         self.r = cp.Variable(self.VC.shape[0] * self.VC.shape[0])
         # E.log.log(self.r)
@@ -193,7 +193,13 @@ class VerificationExperiment(Experiment):
         self.FA =  A.sum.sum(fas)
         self.FR = A.sum.sum(frs)        
         objective = cp.Minimize(self.FR)
-        constraints = [self.FA == self.FR, self.r >= 0.000, self.r <= 1.000]
+        constraints = [self.r >= 0.000, self.r <= 1.000]
+        if FA is not None:
+            constraints.append(self.FR == (1-FA))
+        elif FR is not None:
+            constraints.append(self.FR == FR)
+        else:
+            constraints.append(self.FR == self.FA)
         # constraints = [1-self.FR == 0.654, self.r >= 0.000, self.r <= 1.000]
         prob = cp.Problem(objective, constraints)
         prob.solve()
@@ -206,7 +212,7 @@ class VerificationExperiment(Experiment):
         self.r[self.r > 1] = 1
         self.r[self.r < 0] = 0      
         print ("FA =",np.sum(self.r * np.exp(self.P_mismatch)))
-        print ("FR =",np.sum((1-self.r) * np.exp(self.P_match))     )
+        print ("FR =",np.sum((1-self.r) * np.exp(self.P_match)))
         self.r = self.r.reshape(self.VC.shape[0], self.VC.shape[0])
 
     def test(self, qset=None, ids=None, labels=None, verbose=True, naive=False):
@@ -245,14 +251,15 @@ class VerificationExperiment(Experiment):
                 print (i, self.Q[i_ctq], self.Qt[i_ctq], self.G[i_ctg], self.Gt[i_ctg], self.r[i_ctq_vc, i_ctg_vc], flip, labels[i])
                 print (correct_pos/total_pos,correct_neg/total_neg, (correct_pos+correct_neg)/(total_pos+total_neg))
             i+=1
-        return (correct_pos+correct_neg)/(total_pos+total_neg)
+        return (correct_pos/total_pos,correct_neg/total_neg, (correct_pos+correct_neg)/(total_pos+total_neg))
 
 class OneofLExperiment(Experiment):
     """docstring for OneofLExperiment"""
     def __init__(self, G, Q, max_L=None, true_prob=0.9):
         rangeVC = [np.arange(G[:,[i]].min(), G[:,[i]].max()+1) for i in range(G.shape[1])]      
-        VC = np.array([[x,y] for x,y in itertools.product(*rangeVC)])
+        VC = np.array([list(v) for v in itertools.product(*rangeVC)])
 
+        self.true_prob = true_prob
         super(OneofLExperiment, self).__init__(VC, G, Q, true_prob=true_prob)
         
         self.N = self.G.shape[0]
@@ -303,8 +310,17 @@ class OneofLExperiment(Experiment):
         # self.hatC = lambda ctq: self.VC[np.argmax([self.PCorrgCtqCsel(ctq,csel) for csel in self.VC])]
         self.P_C = lambda ctq: executor.map(self.PCorrgCtqCsel, [(ctq,csel) for csel in self.VC])       
 
-    def reset_super(self, VC, G, Q):
-        super(OneofLExperiment, self).reset(VC, G, Q)
+    def reset_super(self, G, Gt):
+        # super(OneofLExperiment, self).reset(VC, G, Q, true_prob=self.true_prob)
+        self.Gt = Gt
+        self.G = G
+
+        self.PG = VectorMultinomial(self.G)
+
+        self.VC_G = self.filter_VC(self.G)
+        self.PG_G = self.PG.pdf(self.VC_G)        
+
+        self.VC_Gt = self.filter_VC(self.Gt) 
 
     def getBinomialProbInRange(self, N, k_range, P):
         coeffs = self.combs[N,:k_range]
@@ -436,7 +452,7 @@ class RankingExperiment(OneofLExperiment):
         ranks = np.arange(1,len(ranking)+1).astype('float32')
         return np.sum((np.cumsum(ranking)/ranks)[ranking == 1])/float(total_hits)
 
-    def test(self, g_ids, verbose=False, naive=False, pool=None):
+    def test(self, g_ids, verbose=False, naive=False, pool=None):        
         hatC_cache = {}
         total_correct = 0
         total_cov_correct = 0
@@ -444,6 +460,7 @@ class RankingExperiment(OneofLExperiment):
         confmat = np.zeros((self.Q.shape[0], self.Q.shape[0]))
 
         zero_hits = 0
+        full_Gt = self.Gt.copy()
         full_G = self.G.copy()
         full_g_ids = g_ids.copy()
 
@@ -454,8 +471,7 @@ class RankingExperiment(OneofLExperiment):
             ctq = self.Qt[i]
 
             if verbose:
-                print ("running query for ", ctq, cq)
-
+                print ("q#%d"%i, ctq, cq)
             total_hits = len(g_ids[g_ids == i])         
             if total_hits == 0:
                 zero_hits += 1
@@ -469,6 +485,8 @@ class RankingExperiment(OneofLExperiment):
             total_correct = 0.0
             ap = 0
             rr = -1
+            n_left = g_ids[g_ids == i].shape[0]
+            
             for r in range(self.max_L):             
                 if naive:
                     csel = ctq
@@ -494,16 +512,18 @@ class RankingExperiment(OneofLExperiment):
                     g_ids = np.delete(g_ids, choice, 0)
                     n_left = g_ids[g_ids == i].shape[0]
                     
-                if verbose:                             
-                    print (r, csel, self.G[choice], choice_id, i, ap, n_left, g_ids.shape) #self.P_GJct(csel), self.Gt[np.all(self.Gt == ctq, axis=1)].shape[0]
+                # if verbose:                             
+                #     print (r, csel, self.G[choice], choice_id, i, ap, n_left, g_ids.shape) #self.P_GJct(csel), self.Gt[np.all(self.Gt == ctq, axis=1)].shape[0]
                 if n_left == 0:
-                        break
+                    break
                 if choice != -1:
                     self.updateGallery([choice])
+            if verbose:
+                print('ap =', ap)
             APs.append(ap)
             RRs.append(rr)
             
-            self.reset_super(self.VC, full_G, self.Q)
+            self.reset_super(full_G, full_Gt)
             g_ids = full_g_ids      
             np.savetxt('APs.txt', APs)
             np.savetxt('RRs.txt', RRs)

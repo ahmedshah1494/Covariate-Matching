@@ -82,7 +82,7 @@ class RandomNoisyChannel(object):
 
     def addNoise(self,x):
         noisy = np.zeros(x.shape)
-        flips = [np.random.binomial(1, self.true_prob) for i in range(x.shape[0])]
+        flips = [np.random.binomial(1, self.true_prob) for i in range(x.shape[0])]        
         for i in range(len(flips)):
             if flips[i]:
                 noisy[i] = x[i]
@@ -104,6 +104,12 @@ class RandomNoisyChannel(object):
                 return np.log(self.noisy_prob)
         else:
             nz = np.nonzero(ct - c)[0]
+            
+            if len(ct.shape) == 1:
+                ct = ct.reshape(1,-1)
+            if len(c.shape) == 1:
+                c = c.reshape(1,-1)
+
             p = np.zeros(max(ct.shape[0], c.shape[0])) + self.true_prob
             p[nz] = self.noisy_prob
             # print ct - c, nz, p
