@@ -23,6 +23,24 @@ class VectorMultinomial(object):
         p = [np.sum([np.log(self.probs[i][y[i]] if y[i] < len(self.probs[i]) else 1e-20) for i in range(len(y))]) for y in x]
         return np.array(p)
 
+class Multinomial(object):
+    def __init__(self, data, VC):
+        super(Multinomial, self).__init__()
+        self.data = data
+        self.counts = {}
+        for v in data:
+            if tuple(v) in self.counts:
+                self.counts[tuple(v)] += 1.0
+            else:
+                self.counts[tuple(v)] = 1.0
+
+        self.probs = {k:np.log(v/len(data)) for (k,v) in self.counts.items()}
+
+    def pdf(self, x):
+        if len(x.shape) < 2:
+            x = np.expand_dims(x, 0)
+        p = [self.probs.get(tuple(v), -float('inf')) for v in x]
+        return np.array(p)
 class UniformVectorMultinomial(object):
     """docstring for UniformVectorMultinomial"""
     def __init__(self, data):       
