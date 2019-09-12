@@ -1,6 +1,7 @@
 import numpy as np
 import itertools
 import logging
+from pprint import pprint
 import pandas as pd
 
 def loadVCMeta(path, mappings=None):
@@ -94,9 +95,34 @@ def buildConToyDataset(covRange, nIdsPerCov, nGalleryEntriesPerId):
         cov_data.append(data_array)
     return VC, cov_data, G, g_ids
 
+def _get_collision_rate(data):
+    collisions = []
+    for j in range(data.shape[1]):
+        col = data[:,j].tolist()
+        vals = set(col)
+        coll = 0.0
+        for v in vals:
+            coll += col.count(v)
+        collisions.append(coll/len(vals) - 1)
+    # print(collisions)
+
+    data_tuple = [tuple(r) for r in data.tolist()]
+    vc = set(data_tuple)
+    collisions = 0.0
+    for v in vc:
+        collisions += data_tuple.count(v) - 1
+    return (collisions/len(vc))
+    
+def get_all_sublists(L, sublists):
+    if L == []:
+        return sublists    
+    sublists = get_all_sublists(L[1:], [x + [L[0]] for x in sublists]) + get_all_sublists(L[1:], sublists)    
+    return sublists
+
 def loadSREMeta(path, quantization_bucket_size=10, n_ids=-1, seed=0):
     selected_cols = ['subjid', 'sex', 'year_of_birth', 'native_language', 'smoker', 'height_cm', 'weight_kg']
-    selected_cols = ['subjid', 'sex', 'year_of_birth', 'native_language', 'smoker']
+    selected_cols = ['subjid', 'sex', 'native_language', 'year_of_birth', 'smoker']
+    # selected_cols = ['subjid', 'sex', 'year_of_birth']
     data = pd.read_csv(path)    
     data = data[selected_cols]    
     
@@ -163,7 +189,15 @@ def loadSREMeta(path, quantization_bucket_size=10, n_ids=-1, seed=0):
     covariates = np.array(covariates)
     # print covariates[:5]
     # print mappings
-    return covariates[:, 1:], mappings
+    covariates = covariates[:, 1:]
+
+    combs = get_all_sublists(range(covariates.shape[1]),[[]])
+    combs_cr = []
+    for c in combs:
+        cr = _get_collision_rate(covariates[:,c])
+        combs_cr.append(([selected_cols[i+1] for i in c], cr))
+    pprint(sorted(combs_cr, key=lambda x: x[1]))
+    return covariates, mappings
 
 def loadSREDvecs(mdvec_path, fdvec_path):
     mvecs = np.load(mdvec_path)
