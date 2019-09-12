@@ -15,7 +15,6 @@ import cvxpy.atoms.affine as A
 from scipy.special import logsumexp
 from scipy.stats import expon, multinomial, multivariate_normal, norm
 from concurrent.futures import ThreadPoolExecutor, wait
-from multiprocessing.pool import Pool
 
 from data_processing import *
 from utils import *
@@ -32,7 +31,7 @@ class Experiment(object):
     def reset(self, VC, G=None, Q=None, true_prob=0.9):
         self.VC = VC        
         rangeVC = [(VC[:,[i]].min(), VC[:,[i]].max()) for i in range(self.VC.shape[1])]
-        print (true_prob)
+        
         if G is None:
             self.G = self.VC#.repeat(10,1)
         else:
@@ -52,6 +51,12 @@ class Experiment(object):
         self.PQ = VectorMultinomial(Q)
         self.PG = VectorMultinomial(G)
 
+        # self.PQ = UniformVectorMultinomial(VC)
+        # self.PG = UniformVectorMultinomial(VC)
+
+        # self.PQ = Multinomial(Q, self.VC)
+        # self.PG = Multinomial(G, self.VC)
+
         # self.H = GaussianNoisyChannel(torch.zeros(Q.shape[1]), torch.tensor([[0.5,0],[0,5]]), rangeVC)
         # self.H = IdentityNoisyChannel()
         self.H = RandomNoisyChannel(true_prob, self.VC)
@@ -65,7 +70,7 @@ class Experiment(object):
 
 
         self.Qt = self.H(Q)
-        self.Gt = self.J(G)     
+        self.Gt = self.J(G)
         
         self.VC_Gt = self.filter_VC(self.Gt)
 
@@ -185,25 +190,27 @@ class VerificationExperiment(Experiment):
         self.P_mismatch = self.P_mismatch.reshape(-1)
         self.P_match = self.P_match.reshape(-1)
         # print (np.sum(np.exp(self.P_mismatch)), np.sum(np.exp(self.P_match)))
-
+        
         self.r = cp.Variable(self.VC.shape[0] * self.VC.shape[0])
         # E.log.log(self.r)
         fas = self.r * np.exp(self.P_mismatch)
         frs = (1-self.r) * np.exp(self.P_match)
         self.FA =  A.sum.sum(fas)
-        self.FR = A.sum.sum(frs)        
-        objective = cp.Minimize(self.FR)
+        self.FR = A.sum.sum(frs)                
         constraints = [self.r >= 0.000, self.r <= 1.000]
         if FA is not None:
-            constraints.append(self.FR == (1-FA))
+            objective = cp.Minimize(self.FR)
+            constraints.append(self.FA == FA)
         elif FR is not None:
+            objective = cp.Minimize(self.FA)
             constraints.append(self.FR == FR)
         else:
+            objective = cp.Minimize(self.FR)
             constraints.append(self.FR == self.FA)
         # constraints = [1-self.FR == 0.654, self.r >= 0.000, self.r <= 1.000]
         prob = cp.Problem(objective, constraints)
-        prob.solve()
-        # print("Optimal value", prob.solve())
+        prob.solve(solver='ECOS')
+        print("Optimal value", prob.solve())
         # print("Optimal var", self.r.value)
 
         self.r = self.r.value
@@ -214,7 +221,7 @@ class VerificationExperiment(Experiment):
         print ("FA =",np.sum(self.r * np.exp(self.P_mismatch)))
         print ("FR =",np.sum((1-self.r) * np.exp(self.P_match)))
         self.r = self.r.reshape(self.VC.shape[0], self.VC.shape[0])
-
+        # print(self.r)
     def test(self, qset=None, ids=None, labels=None, verbose=True, naive=False):
         if qset is None:
             assert(self.Q.shape[0] == self.G.shape[0])
@@ -489,7 +496,10 @@ class RankingExperiment(OneofLExperiment):
             
             for r in range(self.max_L):             
                 if naive:
-                    csel = ctq
+                    if tuple(ctq) in [tuple(v) for v in self.Gt]:
+                        csel = ctq
+                    else:
+                        csel = self.Gt[np.random.randint(self.Gt.shape[0])]
                 else:
                     csel = self.hatC(ctq, pool)
                 np.random.seed(0)
