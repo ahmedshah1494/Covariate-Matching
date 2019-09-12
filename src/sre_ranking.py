@@ -34,7 +34,7 @@ def computeRankingMetrics(Q, qids, G, gids):
     print(map, mrr)
     
 if __name__ == '__main__':
-    _, mappings = loadSREMeta('SRE/raw/NIST_SRE08_speaker.csv', n_ids=10)
+    _, mappings = loadSREMeta('SRE/raw/NIST_SRE08_speaker.csv', n_ids=15)
     ids = loadSREIds('SRE/sre08/sre08_male_sids.npy', 'SRE/sre08/sre08_female_sids.npy').astype('int32')
     dvecs = loadSREDvecs('SRE/sre08/sre08_male_dvecs.npy', 'SRE/sre08/sre08_female_dvecs.npy')
 
